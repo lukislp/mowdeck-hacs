@@ -40,3 +40,19 @@ ISSUE_REALTIME_UNAUTHORIZED: Final = "realtime_unauthorized"
 API_BLADE_HEIGHT_MIN_MM: Final = 10
 API_BLADE_HEIGHT_MAX_MM: Final = 120
 API_SPEED_MAX_MPS: Final = 2.0
+# SetDriveSpeed.speed_mps (the vendor's manual-drive speed setting).
+API_DRIVE_SPEED_MAX_MPS: Final = 5.0
+
+# Speeds are shown and sent with two decimals (m/s); finer values are float noise.
+SPEED_DECIMALS: Final = 2
+SPEED_STEP_MPS: Final = 0.01
+# Slowest mowing speed when the capabilities name no minimum (MowerCapabilities.min_speed_mps).
+DEFAULT_MIN_SPEED_MPS: Final = 0.1
+
+# The API token permission each command needs (Fleet's COMMAND_RELATION); a 403 names it.
+COMMAND_PERMISSION: Final = {
+    "emergency_stop": "mower.view",
+    "set_drive_speed": "mower.drive",
+    "firmware_update": "fleet.manage",
+}
+DEFAULT_COMMAND_PERMISSION: Final = "mower.control"

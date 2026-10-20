@@ -57,6 +57,13 @@ class MowerTracker(MowDeckEntity, TrackerEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Heading in degrees (0 = north, clockwise), when known."""
+        """Heading in degrees (0 = north, clockwise, one decimal) when known, and where the
+        position comes from (``rtk``, ``gnss``, ``dock``)."""
+        attributes: dict[str, Any] = {}
         heading = self._position.get("heading")
-        return {"heading": heading} if heading is not None else None
+        if isinstance(heading, int | float) and not isinstance(heading, bool):
+            attributes["heading"] = round(float(heading), 1)
+        source = self.mower_state.get("position_source")
+        if self._position and source and source != "unknown":
+            attributes["position_source"] = source
+        return attributes or None

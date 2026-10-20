@@ -11,6 +11,7 @@ from homeassistant.components.lawn_mower import (
 )
 from homeassistant.core import HomeAssistant
 
+from .const import SPEED_DECIMALS
 from .entity import MowDeckEntity, async_add_mower_entities
 
 if TYPE_CHECKING:
@@ -30,6 +31,8 @@ ACTIVITY_MAP: dict[str, LawnMowerActivity] = {
     "docked": LawnMowerActivity.DOCKED,
     "charging": LawnMowerActivity.DOCKED,
     "error": LawnMowerActivity.ERROR,
+    # A firmware update installs only on a docked mower.
+    "updating": LawnMowerActivity.DOCKED,
 }
 
 
@@ -104,5 +107,7 @@ class MowDeckLawnMower(MowDeckEntity, LawnMowerEntity):
         await self.async_send_command({"kind": "set_blade_height", "mm": int(mm)})
 
     async def async_set_speed(self, mps: float) -> None:
-        """``mowdeck.set_speed``."""
-        await self.async_send_command({"kind": "set_speed", "mps": float(mps)})
+        """``mowdeck.set_speed`` (two decimals, like the number entity)."""
+        await self.async_send_command(
+            {"kind": "set_speed", "mps": round(float(mps), SPEED_DECIMALS)}
+        )

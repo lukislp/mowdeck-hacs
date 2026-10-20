@@ -47,6 +47,8 @@ def mower_state(**overrides: Any) -> dict[str, Any]:
         "mower_id": MOWER_ID,
         "account_id": ACCOUNT_ID,
         "observed_at": now_iso(),
+        "heartbeat_at": now_iso(),
+        "connected": True,
         "activity": "docked",
         "battery_percent": 87,
         "charging": True,
@@ -56,6 +58,7 @@ def mower_state(**overrides: Any) -> dict[str, Any]:
         "blade_height_mm": 50,
         "speed_mps": 0.0,
         "position": {"lat": 48.137, "lon": 11.575, "heading": 90.0},
+        "position_source": "rtk",
         "firmware": "sim-1.0",
         "light_on": False,
         "error_code": None,
@@ -78,6 +81,7 @@ class FakeMowDeck:
     states: dict[str, dict[str, Any]] = field(default_factory=dict)
     capabilities: dict[str, dict[str, Any]] = field(default_factory=dict)
     maps: dict[str, dict[str, Any]] = field(default_factory=dict)
+    health: dict[str, dict[str, Any]] = field(default_factory=dict)
     commands: list[dict[str, Any]] = field(default_factory=list)
     forbid_commands: bool = False
     fail_requests: int = 0
@@ -121,6 +125,23 @@ class FakeMowDeck:
             "connection_kinds": ["simulated"],
             "rtk_sources": ["base_station"],
         }
+        self.health[MOWER_ID] = {
+            "mower_id": MOWER_ID,
+            "since": now_iso(),
+            "blade_hours": 41.2,
+            "blade_hours_since_change": 12.345678,
+            "blade_changed_at": None,
+            "blade_hours_threshold": 50.0,
+            "device_blade_hours": None,
+            "device_blade_warn_hours": None,
+            "blade_source": "telemetry",
+            "mowing_hours": 40.00000000001,
+            "distance_m": 12345.6,
+            "battery_cycles": 17,
+            "charge_sessions": 20,
+            "errors": {},
+            "updated_at": now_iso(),
+        }
         square = [[0, 0], [10, 0], [10, 10]]
         self.maps[MOWER_ID] = {
             "reference": {"origin_lat": 48.137, "origin_lon": 11.575},
@@ -160,6 +181,7 @@ class FakeMowDeck:
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/state", self._state)
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/capabilities", self._caps)
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/map", self._map)
+        app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/health", self._health)
         app.router.add_get("/api/v1/realtime/ws", self._ws)
         return app
 
@@ -313,6 +335,12 @@ class FakeMowDeck:
             },
             headers={"ETag": f'"{revision}"'},
         )
+
+    async def _health(self, request: web.Request) -> web.Response:
+        mower_id = request.match_info["mower_id"]
+        if mower_id not in self.health:
+            return problem(404, "Not found", "no telemetry yet")
+        return web.json_response(self.health[mower_id])
 
     # Realtime
 

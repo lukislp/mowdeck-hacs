@@ -65,6 +65,7 @@ class MowDeckData:
     capabilities: dict[str, dict[str, Any]] = field(default_factory=dict)
     maps: dict[str, dict[str, Any]] = field(default_factory=dict)
     map_revisions: dict[str, str] = field(default_factory=dict)
+    health: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
@@ -119,6 +120,7 @@ class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
             raise UpdateFailed(str(err)) from err
         for mower_id in set(data.states) - set(data.mowers):
             data.states.pop(mower_id, None)
+            data.health.pop(mower_id, None)
         return data
 
     async def _async_fetch_static(self, data: MowDeckData, mower_id: str) -> None:
@@ -129,6 +131,9 @@ class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
         if mower_map is not None:
             data.maps[mower_id] = dict(mower_map.get("map") or {})
             data.map_revisions[mower_id] = str(mower_map.get("revision", ""))
+        health = await self.client.get_health(mower_id)
+        if health is not None:
+            data.health[mower_id] = health
 
     @callback
     def async_push_state(self, mower_id: str, state: dict[str, Any]) -> None:
@@ -164,10 +169,17 @@ class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
         return self.data.states.get(mower_id)
 
     def is_online(self, mower_id: str) -> bool:
-        """A fresh state exists and the mower does not report itself offline."""
+        """The gateway holds a live link to the mower (ADR 0040 in lukislp/mowdeck).
+
+        Offline when there is no state, Telemetry flags it stale, the gateway published its
+        link-lost state (``connected`` false), no state arrived for ``STALE_AFTER`` (the gateway
+        repeats the state every 10 s as a heartbeat) or the mower reports itself offline.
+        """
         state = self.data.states.get(mower_id)
         received = self.data.received_at.get(mower_id)
         if state is None or received is None or self.data.stale.get(mower_id, False):
+            return False
+        if state.get("connected") is False:
             return False
         if dt_util.utcnow() - received > STALE_AFTER:
             return False
