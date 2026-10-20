@@ -70,6 +70,26 @@
         "name": "Return to dock"
       }
     },
+    "camera": {
+      "camera": {
+        "name": "Camera"
+      },
+      "camera_front_left": {
+        "name": "Front left camera"
+      },
+      "camera_front_right": {
+        "name": "Front right camera"
+      },
+      "camera_front": {
+        "name": "Front camera"
+      },
+      "camera_rear": {
+        "name": "Rear camera"
+      },
+      "camera_other": {
+        "name": "Camera {name}"
+      }
+    },
     "device_tracker": {
       "position": {
         "name": "Position"
@@ -208,6 +228,39 @@
     },
     "command_forbidden": {
       "message": "The API token may not send {command}. Grant {permission} to the token in the MowDeck app."
+    },
+    "camera_relay_unsupported": {
+      "message": "MowDeck's camera relay cannot serve this mower. Enable the camera relay (and for Mammotion mowers the Agora bridge) in MowDeck"
+    },
+    "camera_unsupported": {
+      "message": "This mower has no camera MowDeck can show"
+    },
+    "camera_budget": {
+      "message": "A camera limit of the mower refused the stream (video budget or battery)"
+    },
+    "camera_forbidden": {
+      "message": "MowDeck refused the camera: the plan does not include the camera, or the API token lacks mower.view"
+    },
+    "camera_not_found": {
+      "message": "The mower is not visible to the API token"
+    },
+    "camera_unavailable": {
+      "message": "The camera is not reachable right now: MowDeck, its camera relay or the mower did not answer"
+    },
+    "camera_failed": {
+      "message": "The camera could not be started, see the log"
+    },
+    "camera_refused": {
+      "message": "MowDeck's media server refused the stream"
+    },
+    "camera_missing": {
+      "message": "The mower does not offer this camera in the current session"
+    },
+    "camera_starting_timeout": {
+      "message": "The mower's camera did not start in time. Try again in a moment"
+    },
+    "camera_lease_lost": {
+      "message": "The camera stream ended on the MowDeck side. Open the camera again"
     }
   },
   "issues": {

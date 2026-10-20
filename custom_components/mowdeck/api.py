@@ -63,6 +63,15 @@ class Problem:
         return f"HTTP {self.status}: {message}{suffix}"
 
 
+@dataclass(frozen=True, slots=True)
+class WhepResponse:
+    """The parts of a WHEP answer the integration reads (never the ticket)."""
+
+    status: int
+    location: str | None = None
+    body: str = ""
+
+
 class MowDeckError(Exception):
     """Base error of the MowDeck client."""
 
@@ -318,6 +327,72 @@ class MowDeckClient:
     async def get_command(self, command_id: str) -> dict[str, Any]:
         """``GET /fleet/commands/{id}``: the command record with its status."""
         return dict(await self._request("GET", f"{FLEET}/commands/{command_id}"))
+
+    # Camera relay (ADR 0045 in lukislp/mowdeck)
+
+    async def open_camera_session(self, mower_id: str) -> dict[str, Any]:
+        """``POST /fleet/mowers/{id}/camera/session`` with ``transport`` ``relay``: a new viewer
+        lease of the token on the camera relay (WHEP URL per camera, ticket, lease id).
+
+        ``relay`` and not ``auto``: the direct vendor path of ``auto``'s fallback is played by
+        the vendor's browser SDK, which Home Assistant cannot do. Never retried (each request
+        opens a lease)."""
+        return dict(
+            await self._request(
+                "POST", f"{FLEET}/mowers/{mower_id}/camera/session", json={"transport": "relay"}
+            )
+        )
+
+    async def renew_camera_session(self, mower_id: str, lease_id: str) -> dict[str, Any]:
+        """``POST .../camera/session/{lease_id}/renew``: the lease's heartbeat with a fresh
+        ticket; :class:`MowDeckNotFoundError` when the lease is gone."""
+        return dict(
+            await self._request(
+                "POST", f"{FLEET}/mowers/{mower_id}/camera/session/{lease_id}/renew"
+            )
+        )
+
+    async def close_camera_session(self, mower_id: str, lease_id: str) -> None:
+        """``DELETE .../camera/session/{lease_id}``: end the lease (idempotent)."""
+        await self._request("DELETE", f"{FLEET}/mowers/{mower_id}/camera/session/{lease_id}")
+
+    def media_url(self, url: str) -> str:
+        """An absolute URL for a WHEP URL of the relay: an absolute path is on the MowDeck
+        origin, an ``http(s)`` URL stays as it is."""
+        if url.startswith("/") and not url.startswith("//"):
+            parts = urlsplit(self.base_url)
+            return urlunsplit((parts.scheme, parts.netloc, url, "", ""))
+        if urlsplit(url).scheme in ("http", "https"):
+            return url
+        msg = f"not a WHEP URL: {url!r}"
+        raise ValueError(msg)
+
+    async def whep_request(
+        self,
+        method: str,
+        url: str,
+        ticket: str,
+        *,
+        body: str | None = None,
+        content_type: str | None = None,
+    ) -> WhepResponse:
+        """One WHEP request (RFC 9725) to the relay's media server with the ticket as bearer
+        token; the status, ``Location`` and body come back as they are. Connection errors and
+        timeouts raise :class:`MowDeckConnectionError`."""
+        headers = {"Authorization": f"Bearer {ticket}"}
+        if content_type:
+            headers["Content-Type"] = content_type
+        if method == "POST":
+            headers["Accept"] = "application/sdp"
+        try:
+            async with self._session.request(
+                method, url, data=body, headers=headers, timeout=self._timeout
+            ) as response:
+                text = await response.text() if response.status == 201 else ""
+                return WhepResponse(response.status, response.headers.get("Location"), text)
+        except (aiohttp.ClientError, TimeoutError) as err:
+            msg = f"WHEP {method} failed: {type(err).__name__}"
+            raise MowDeckConnectionError(msg) from err
 
     # Telemetry
 
