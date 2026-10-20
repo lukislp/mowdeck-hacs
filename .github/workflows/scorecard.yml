@@ -1,0 +1,45 @@
+name: OpenSSF Scorecard
+
+# Weekly supply-chain posture check (branch protection, pinned dependencies, token permissions,
+# signed releases, ...). Results land in the Security tab as code-scanning alerts and on
+# https://scorecard.dev/viewer/?uri=github.com/lukislp/mowdeck-hacs. Read-only, non-blocking.
+#
+# After a merge it runs once ci.yml has finished on main instead of on push, so the analysis
+# sees the CI run of the latest main commit.
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    # A cancelled or failed ci.yml run is superseded by the next one; analyse after that instead.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      security-events: write
+      id-token: write
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          sarif_file: results.sarif

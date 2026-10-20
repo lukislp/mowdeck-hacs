@@ -1,17 +1,22 @@
 # MowDeck for Home Assistant
 
+[![CI](https://github.com/lukislp/mowdeck-hacs/actions/workflows/ci.yml/badge.svg)](https://github.com/lukislp/mowdeck-hacs/actions/workflows/ci.yml) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lukislp/mowdeck-hacs/badge)](https://scorecard.dev/viewer/?uri=github.com/lukislp/mowdeck-hacs) [![CodeQL](https://github.com/lukislp/mowdeck-hacs/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/lukislp/mowdeck-hacs/security/code-scanning)
+[![Release](https://img.shields.io/github/v/release/lukislp/mowdeck-hacs)](https://github.com/lukislp/mowdeck-hacs/releases)
+[![HACS](https://img.shields.io/badge/HACS-custom-41BDF5)](https://hacs.xyz/docs/faq/custom_repositories/)
+[![License: AGPL-3.0](https://img.shields.io/github/license/lukislp/mowdeck-hacs)](LICENSE)
+
 Custom integration (HACS) that brings the mowers of a [MowDeck](https://github.com/lukislp/mowdeck) installation into Home Assistant. It is a pure client of the public MowDeck API: it authenticates with an API token, reads mowers, states, capabilities and maps over HTTP, receives live states over the MowDeck Realtime WebSocket and sends commands through Fleet. It needs no Python packages beyond Home Assistant itself.
 
 - Domain `mowdeck`, IoT class `local_push`, integration type `hub` (one entry per MowDeck account, one device per mower).
 - Requires Home Assistant 2026.10.0 or newer (`hacs.json`).
 - Licence: AGPL-3.0-only, like the rest of MowDeck.
-- Status: private repository; HACS installation works once it is public.
+- Releases: semantic versions on the 0.x line, SSH-signed tags, `mowdeck.zip` with Sigstore signatures and build provenance (see `SECURITY.md`).
 
 ## Installation
 
-HACS: three dots, **Custom repositories**, add `https://github.com/lukislp/mowdeck-hacs` with type **Integration** (possible once the repository is public), install **MowDeck**, restart Home Assistant.
+HACS: three dots, **Custom repositories**, add `https://github.com/lukislp/mowdeck-hacs` with type **Integration**, install **MowDeck**, restart Home Assistant. HACS installs the `mowdeck.zip` of the chosen release.
 
-Manually: copy `custom_components/mowdeck` into `<config>/custom_components/` and restart Home Assistant.
+Manually: unpack `mowdeck.zip` of a [release](https://github.com/lukislp/mowdeck-hacs/releases) into `<config>/custom_components/mowdeck/` (or copy `custom_components/mowdeck` of the tag) and restart Home Assistant.
 
 ## Create an API token in MowDeck
 
@@ -109,7 +114,7 @@ uv run pytest --cov
 uv run python scripts/check_hacs_layout.py
 ```
 
-CI (`.github/workflows/ci.yml`) runs the same plus hassfest.
+CI (`.github/workflows/ci.yml`) runs the same plus hassfest and the HACS validation; releases, Dependabot and the security checks are described in `CONTRIBUTING.md` and `SECURITY.md`.
 
 ## Licence
 

@@ -1,0 +1,37 @@
+{
+  "branches": ["main"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "parserOpts": {
+          "headerPattern": "^(\\w*)(?:\\((.*)\\))?!?: (.*)$",
+          "breakingHeaderPattern": "^(\\w*)(?:\\((.*)\\))?!: (.*)$",
+          "noteKeywords": ["BREAKING CHANGE", "BREAKING-CHANGE"]
+        },
+        "releaseRules": [
+          {
+            "breaking": true,
+            "release": "minor"
+          },
+          {
+            "type": "refactor",
+            "release": "patch"
+          }
+        ]
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "parserOpts": {
+          "headerPattern": "^(\\w*)(?:\\((.*)\\))?!?: (.*)$",
+          "breakingHeaderPattern": "^(\\w*)(?:\\((.*)\\))?!: (.*)$",
+          "noteKeywords": ["BREAKING CHANGE", "BREAKING-CHANGE"]
+        }
+      }
+    ],
+    "@semantic-release/github"
+  ]
+}
