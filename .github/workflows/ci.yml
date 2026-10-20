@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.24"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked
+      - run: uv run ruff check . && uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest --cov --cov-report=term-missing -p no:cacheprovider
+      - run: uv run python scripts/check_hacs_layout.py
+
+  hassfest:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: home-assistant/actions/hassfest@06749dd8c0b54f350bc69c8752456cee498808a3

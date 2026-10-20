@@ -1,0 +1,208 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mit MowDeck verbinden",
+        "description": "Gib die Adresse deiner MowDeck-Installation und ein API-Token ein, das in der MowDeck-App (Einstellungen, API-Tokens) mit den Berechtigungen mower.view und mower.control erstellt wurde.",
+        "data": {
+          "url": "URL",
+          "api_token": "API-Token"
+        },
+        "data_description": {
+          "url": "Basis-URL der MowDeck-Web-App, zum Beispiel {example_url}",
+          "api_token": "Das Token wird nur einmal beim Erstellen angezeigt."
+        }
+      },
+      "reauth_confirm": {
+        "title": "MowDeck-API-Token erneuern",
+        "description": "Das API-Token für {url} wurde widerrufen oder ist abgelaufen. Erstelle in der MowDeck-App ein neues Token und gib es hier ein.",
+        "data": {
+          "api_token": "API-Token"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "MowDeck ist unter dieser URL nicht erreichbar.",
+      "invalid_auth": "Das API-Token ist ungültig, abgelaufen oder widerrufen.",
+      "invalid_url": "Gib eine http- oder https-URL ein.",
+      "missing_permission": "Dem API-Token fehlt die Berechtigung mower.view.",
+      "no_account": "Dieses Token gehört zu keinem MowDeck-Konto.",
+      "unknown": "Unerwarteter Fehler, siehe Protokoll."
+    },
+    "abort": {
+      "already_configured": "Dieses MowDeck-Konto ist bereits eingerichtet.",
+      "reauth_successful": "Das API-Token wurde aktualisiert.",
+      "wrong_account": "Das neue Token gehört zu einem anderen MowDeck-Konto."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MowDeck-Optionen",
+        "data": {
+          "poll_interval": "Abfrageintervall",
+          "expose_emergency_stop": "Not-Aus-Taste anzeigen"
+        },
+        "data_description": {
+          "poll_interval": "Sekunden zwischen API-Abfragen, solange die Live-Verbindung getrennt ist.",
+          "expose_emergency_stop": "Fügt pro Mähroboter eine Not-Aus-Taste hinzu. Die Aktion mowdeck.emergency_stop ist immer verfügbar."
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "charging": {
+        "name": "Lädt"
+      },
+      "online": {
+        "name": "Online"
+      },
+      "error": {
+        "name": "Fehler"
+      }
+    },
+    "button": {
+      "emergency_stop": {
+        "name": "Not-Aus"
+      },
+      "return_to_dock": {
+        "name": "Zur Station"
+      }
+    },
+    "device_tracker": {
+      "position": {
+        "name": "Position"
+      }
+    },
+    "number": {
+      "blade_height": {
+        "name": "Schnitthöhe"
+      },
+      "speed": {
+        "name": "Mähgeschwindigkeit"
+      }
+    },
+    "select": {
+      "area": {
+        "name": "Bereich",
+        "state": {
+          "all": "Alle Bereiche"
+        }
+      }
+    },
+    "sensor": {
+      "battery": {
+        "name": "Akku"
+      },
+      "activity": {
+        "name": "Tätigkeit",
+        "state": {
+          "idle": "Bereit",
+          "mowing": "Mäht",
+          "paused": "Pausiert",
+          "returning": "Fährt zurück",
+          "docked": "In der Station",
+          "charging": "Lädt",
+          "error": "Fehler",
+          "offline": "Offline"
+        }
+      },
+      "rtk_fix": {
+        "name": "RTK-Fix",
+        "state": {
+          "none": "Keiner",
+          "float": "Float",
+          "fixed": "Fixed"
+        }
+      },
+      "rtk_source": {
+        "name": "RTK-Quelle",
+        "state": {
+          "base_station": "Basisstation",
+          "network": "Netzwerk (NRTK)"
+        }
+      },
+      "connection": {
+        "name": "Verbindung",
+        "state": {
+          "ble_bridge": "Bluetooth-Bridge",
+          "wifi": "WLAN",
+          "cloud": "Cloud",
+          "simulated": "Simuliert"
+        }
+      },
+      "blade_height": {
+        "name": "Schnitthöhe"
+      },
+      "speed": {
+        "name": "Geschwindigkeit"
+      },
+      "last_seen": {
+        "name": "Zuletzt gesehen"
+      },
+      "error_code": {
+        "name": "Fehlercode"
+      }
+    },
+    "switch": {
+      "light": {
+        "name": "Kameralicht"
+      }
+    }
+  },
+  "exceptions": {
+    "command_failed": {
+      "message": "MowDeck-Befehl {command} fehlgeschlagen: {error}"
+    },
+    "command_forbidden": {
+      "message": "Das API-Token darf {command} nicht senden. Gib dem Token in der MowDeck-App die Berechtigung mower.control."
+    }
+  },
+  "issues": {
+    "realtime_unauthorized": {
+      "title": "MowDeck-Live-Updates werden abgelehnt",
+      "description": "MowDeck unter {url} lehnt die Live-Verbindung auch mit einem frischen Zugriffstoken ab, deshalb fragt Home Assistant nur noch alle paar Minuten ab. Prüfe, ob das API-Token noch existiert und die Berechtigung mower.view hat, oder erstelle ein neues Token und gib es über Neu konfigurieren an der Integration ein. Diese Meldung verschwindet, sobald die Live-Verbindung wieder funktioniert."
+    }
+  },
+  "services": {
+    "start_mow": {
+      "name": "Bereiche mähen",
+      "description": "Startet einen Mähauftrag für einen oder mehrere Kartenbereiche, optional mit Mustereinstellungen.",
+      "fields": {
+        "area_ids": {
+          "name": "Bereichs-IDs",
+          "description": "Kartenbereichs-IDs in Mähreihenfolge. Standard: der in der Bereichsauswahl gewählte Bereich oder alle Bereiche."
+        },
+        "pattern": {
+          "name": "Muster",
+          "description": "Mustereinstellungen, von MowDeck gegen das JSON-Schema des Musters geprüft."
+        }
+      }
+    },
+    "emergency_stop": {
+      "name": "Not-Aus",
+      "description": "Stoppt den Mähroboter und die Messer sofort."
+    },
+    "set_blade_height": {
+      "name": "Schnitthöhe einstellen",
+      "description": "Stellt die Schnitthöhe ein.",
+      "fields": {
+        "mm": {
+          "name": "Höhe",
+          "description": "Schnitthöhe in Millimetern."
+        }
+      }
+    },
+    "set_speed": {
+      "name": "Mähgeschwindigkeit einstellen",
+      "description": "Stellt die Fahrgeschwindigkeit beim Mähen ein.",
+      "fields": {
+        "mps": {
+          "name": "Geschwindigkeit",
+          "description": "Geschwindigkeit in Metern pro Sekunde."
+        }
+      }
+    }
+  }
+}

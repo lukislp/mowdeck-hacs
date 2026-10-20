@@ -1,0 +1,35 @@
+{
+  "entity": {
+    "sensor": {
+      "activity": { "default": "mdi:robot-mower" },
+      "rtk_fix": { "default": "mdi:crosshairs-gps" },
+      "rtk_source": { "default": "mdi:satellite-uplink" },
+      "connection": { "default": "mdi:lan-connect" },
+      "blade_height": { "default": "mdi:arrow-expand-vertical" },
+      "error_code": { "default": "mdi:alert-circle-outline" }
+    },
+    "button": {
+      "emergency_stop": { "default": "mdi:alert-octagon" },
+      "return_to_dock": { "default": "mdi:home-import-outline" }
+    },
+    "number": {
+      "blade_height": { "default": "mdi:arrow-expand-vertical" },
+      "speed": { "default": "mdi:speedometer" }
+    },
+    "select": {
+      "area": { "default": "mdi:texture-box" }
+    },
+    "switch": {
+      "light": { "default": "mdi:lightbulb-outline", "state": { "on": "mdi:lightbulb-on" } }
+    },
+    "device_tracker": {
+      "position": { "default": "mdi:map-marker" }
+    }
+  },
+  "services": {
+    "start_mow": { "service": "mdi:play" },
+    "emergency_stop": { "service": "mdi:alert-octagon" },
+    "set_blade_height": { "service": "mdi:arrow-expand-vertical" },
+    "set_speed": { "service": "mdi:speedometer" }
+  }
+}

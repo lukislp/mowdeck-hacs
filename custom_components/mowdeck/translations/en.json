@@ -1,0 +1,208 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to MowDeck",
+        "description": "Enter the address of your MowDeck installation and an API token created in the MowDeck app (Settings, API tokens) with the permissions mower.view and mower.control.",
+        "data": {
+          "url": "URL",
+          "api_token": "API token"
+        },
+        "data_description": {
+          "url": "Base URL of the MowDeck web app, for example {example_url}",
+          "api_token": "The token is shown only once when it is created."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Renew the MowDeck API token",
+        "description": "The API token for {url} was revoked or has expired. Create a new token in the MowDeck app and enter it here.",
+        "data": {
+          "api_token": "API token"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach MowDeck at this URL.",
+      "invalid_auth": "The API token is invalid, expired or revoked.",
+      "invalid_url": "Enter an http or https URL.",
+      "missing_permission": "The API token lacks the permission mower.view.",
+      "no_account": "This token belongs to no MowDeck account.",
+      "unknown": "Unexpected error, see the log."
+    },
+    "abort": {
+      "already_configured": "This MowDeck account is already configured.",
+      "reauth_successful": "The API token was updated.",
+      "wrong_account": "The new token belongs to another MowDeck account."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MowDeck options",
+        "data": {
+          "poll_interval": "Poll interval",
+          "expose_emergency_stop": "Show the emergency stop button"
+        },
+        "data_description": {
+          "poll_interval": "Seconds between API polls while the live connection is down.",
+          "expose_emergency_stop": "Adds an emergency stop button per mower. The action mowdeck.emergency_stop is always available."
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "charging": {
+        "name": "Charging"
+      },
+      "online": {
+        "name": "Online"
+      },
+      "error": {
+        "name": "Error"
+      }
+    },
+    "button": {
+      "emergency_stop": {
+        "name": "Emergency stop"
+      },
+      "return_to_dock": {
+        "name": "Return to dock"
+      }
+    },
+    "device_tracker": {
+      "position": {
+        "name": "Position"
+      }
+    },
+    "number": {
+      "blade_height": {
+        "name": "Blade height"
+      },
+      "speed": {
+        "name": "Mowing speed"
+      }
+    },
+    "select": {
+      "area": {
+        "name": "Area",
+        "state": {
+          "all": "All areas"
+        }
+      }
+    },
+    "sensor": {
+      "battery": {
+        "name": "Battery"
+      },
+      "activity": {
+        "name": "Activity",
+        "state": {
+          "idle": "Idle",
+          "mowing": "Mowing",
+          "paused": "Paused",
+          "returning": "Returning",
+          "docked": "Docked",
+          "charging": "Charging",
+          "error": "Error",
+          "offline": "Offline"
+        }
+      },
+      "rtk_fix": {
+        "name": "RTK fix",
+        "state": {
+          "none": "None",
+          "float": "Float",
+          "fixed": "Fixed"
+        }
+      },
+      "rtk_source": {
+        "name": "RTK source",
+        "state": {
+          "base_station": "Base station",
+          "network": "Network (NRTK)"
+        }
+      },
+      "connection": {
+        "name": "Connection",
+        "state": {
+          "ble_bridge": "Bluetooth bridge",
+          "wifi": "Wi-Fi",
+          "cloud": "Cloud",
+          "simulated": "Simulated"
+        }
+      },
+      "blade_height": {
+        "name": "Blade height"
+      },
+      "speed": {
+        "name": "Speed"
+      },
+      "last_seen": {
+        "name": "Last seen"
+      },
+      "error_code": {
+        "name": "Error code"
+      }
+    },
+    "switch": {
+      "light": {
+        "name": "Camera light"
+      }
+    }
+  },
+  "exceptions": {
+    "command_failed": {
+      "message": "MowDeck command {command} failed: {error}"
+    },
+    "command_forbidden": {
+      "message": "The API token may not send {command}. Grant mower.control to the token in the MowDeck app."
+    }
+  },
+  "issues": {
+    "realtime_unauthorized": {
+      "title": "MowDeck live updates are refused",
+      "description": "MowDeck at {url} refuses the live connection even with a fresh access token, so Home Assistant only polls every few minutes. Check that the API token still exists and has the permission mower.view, or create a new token and enter it with Reconfigure on the integration. This message disappears as soon as the live connection works again."
+    }
+  },
+  "services": {
+    "start_mow": {
+      "name": "Start mowing areas",
+      "description": "Starts a mowing job on one or more map areas, optionally with pattern settings.",
+      "fields": {
+        "area_ids": {
+          "name": "Area IDs",
+          "description": "Map area ids in mowing order. Default: the area chosen in the Area select, or all areas."
+        },
+        "pattern": {
+          "name": "Pattern",
+          "description": "Pattern settings, validated by MowDeck against the pattern's JSON Schema."
+        }
+      }
+    },
+    "emergency_stop": {
+      "name": "Emergency stop",
+      "description": "Stops the mower and its blades at once."
+    },
+    "set_blade_height": {
+      "name": "Set blade height",
+      "description": "Sets the cutting height.",
+      "fields": {
+        "mm": {
+          "name": "Height",
+          "description": "Blade height in millimetres."
+        }
+      }
+    },
+    "set_speed": {
+      "name": "Set mowing speed",
+      "description": "Sets the driving speed while mowing.",
+      "fields": {
+        "mps": {
+          "name": "Speed",
+          "description": "Speed in metres per second."
+        }
+      }
+    }
+  }
+}
