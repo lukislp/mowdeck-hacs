@@ -101,7 +101,7 @@ jobs:
             chmod 600 "$key"
             public="$(ssh-keygen -y -f "$key" | awk '{print $2}')"
             rm -f "$key"
-            if ! gh api "users/$OWNER/ssh_signing_keys" --jq '.[].key' | grep -qF "$public"; then
+            if ! gh api --paginate "users/$OWNER/ssh_signing_keys?per_page=100" --jq '.[].key' | grep -qF "$public"; then
               echo "::error::the public half of DEPLOY_SIGNING_KEY is not a signing key of $OWNER (github.com/settings/keys), so the tag would show as unverified."
               exit 1
             fi
