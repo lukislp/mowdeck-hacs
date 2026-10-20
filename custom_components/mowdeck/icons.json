@@ -6,7 +6,12 @@
       "rtk_source": { "default": "mdi:satellite-uplink" },
       "connection": { "default": "mdi:lan-connect" },
       "blade_height": { "default": "mdi:arrow-expand-vertical" },
-      "error_code": { "default": "mdi:alert-circle-outline" }
+      "error_code": { "default": "mdi:alert-circle-outline" },
+      "bridge_signal": { "default": "mdi:bluetooth" },
+      "blade_hours": { "default": "mdi:saw-blade" },
+      "mowing_hours": { "default": "mdi:timer-outline" },
+      "mowing_distance": { "default": "mdi:map-marker-distance" },
+      "battery_cycles": { "default": "mdi:battery-sync-outline" }
     },
     "button": {
       "emergency_stop": { "default": "mdi:alert-octagon" },
@@ -14,7 +19,8 @@
     },
     "number": {
       "blade_height": { "default": "mdi:arrow-expand-vertical" },
-      "speed": { "default": "mdi:speedometer" }
+      "speed": { "default": "mdi:speedometer" },
+      "drive_speed": { "default": "mdi:gamepad-variant-outline" }
     },
     "select": {
       "area": { "default": "mdi:texture-box" }

@@ -81,6 +81,9 @@
       },
       "speed": {
         "name": "Mowing speed"
+      },
+      "drive_speed": {
+        "name": "Manual drive speed"
       }
     },
     "select": {
@@ -105,7 +108,8 @@
           "docked": "Docked",
           "charging": "Charging",
           "error": "Error",
-          "offline": "Offline"
+          "offline": "Offline",
+          "updating": "Updating firmware"
         }
       },
       "rtk_fix": {
@@ -142,12 +146,59 @@
         "name": "Last seen"
       },
       "error_code": {
-        "name": "Error code"
+        "name": "Error code",
+        "state_attributes": {
+          "error_message": {
+            "name": "Error message"
+          },
+          "error_category": {
+            "name": "Error category",
+            "state": {
+              "trapped": "Trapped",
+              "obstacle": "Obstacle",
+              "outside": "Outside the work area",
+              "wheel_slip": "Wheel slip",
+              "lift_tilt": "Lifted or tilted",
+              "collision": "Collision",
+              "battery": "Battery",
+              "blade_motor": "Blade or motor",
+              "rain": "Rain",
+              "positioning": "Positioning",
+              "other": "Other"
+            }
+          },
+          "error_source": {
+            "name": "Error source"
+          },
+          "drive_recoverable": {
+            "name": "Recoverable by driving"
+          }
+        }
+      },
+      "bridge_signal": {
+        "name": "Bluetooth bridge signal"
+      },
+      "blade_hours": {
+        "name": "Blade hours since change"
+      },
+      "mowing_hours": {
+        "name": "Mowing hours"
+      },
+      "mowing_distance": {
+        "name": "Distance driven"
+      },
+      "battery_cycles": {
+        "name": "Battery cycles"
       }
     },
     "switch": {
       "light": {
         "name": "Camera light"
+      }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
       }
     }
   },
@@ -156,7 +207,7 @@
       "message": "MowDeck command {command} failed: {error}"
     },
     "command_forbidden": {
-      "message": "The API token may not send {command}. Grant mower.control to the token in the MowDeck app."
+      "message": "The API token may not send {command}. Grant {permission} to the token in the MowDeck app."
     }
   },
   "issues": {

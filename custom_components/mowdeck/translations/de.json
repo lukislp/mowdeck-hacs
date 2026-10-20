@@ -81,6 +81,9 @@
       },
       "speed": {
         "name": "Mähgeschwindigkeit"
+      },
+      "drive_speed": {
+        "name": "Geschwindigkeit beim manuellen Fahren"
       }
     },
     "select": {
@@ -105,7 +108,8 @@
           "docked": "In der Station",
           "charging": "Lädt",
           "error": "Fehler",
-          "offline": "Offline"
+          "offline": "Offline",
+          "updating": "Firmware-Update"
         }
       },
       "rtk_fix": {
@@ -142,12 +146,59 @@
         "name": "Zuletzt gesehen"
       },
       "error_code": {
-        "name": "Fehlercode"
+        "name": "Fehlercode",
+        "state_attributes": {
+          "error_message": {
+            "name": "Fehlermeldung"
+          },
+          "error_category": {
+            "name": "Fehlerkategorie",
+            "state": {
+              "trapped": "Festgefahren",
+              "obstacle": "Hindernis",
+              "outside": "Außerhalb des Arbeitsbereichs",
+              "wheel_slip": "Radschlupf",
+              "lift_tilt": "Angehoben oder gekippt",
+              "collision": "Kollision",
+              "battery": "Akku",
+              "blade_motor": "Messer oder Motor",
+              "rain": "Regen",
+              "positioning": "Positionierung",
+              "other": "Sonstiges"
+            }
+          },
+          "error_source": {
+            "name": "Fehlerquelle"
+          },
+          "drive_recoverable": {
+            "name": "Durch Fahren lösbar"
+          }
+        }
+      },
+      "bridge_signal": {
+        "name": "Signal der Bluetooth-Bridge"
+      },
+      "blade_hours": {
+        "name": "Messerstunden seit Wechsel"
+      },
+      "mowing_hours": {
+        "name": "Mähstunden"
+      },
+      "mowing_distance": {
+        "name": "Gefahrene Strecke"
+      },
+      "battery_cycles": {
+        "name": "Akkuzyklen"
       }
     },
     "switch": {
       "light": {
         "name": "Kameralicht"
+      }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
       }
     }
   },
@@ -156,7 +207,7 @@
       "message": "MowDeck-Befehl {command} fehlgeschlagen: {error}"
     },
     "command_forbidden": {
-      "message": "Das API-Token darf {command} nicht senden. Gib dem Token in der MowDeck-App die Berechtigung mower.control."
+      "message": "Das API-Token darf {command} nicht senden. Gib dem Token in der MowDeck-App die Berechtigung {permission}."
     }
   },
   "issues": {
