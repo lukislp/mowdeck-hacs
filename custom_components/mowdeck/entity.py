@@ -13,7 +13,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import MowDeckError, MowDeckForbiddenError
-from .const import DOMAIN, MANUFACTURER
+from .const import COMMAND_PERMISSION, DEFAULT_COMMAND_PERMISSION, DOMAIN, MANUFACTURER
 from .coordinator import MowDeckCoordinator
 
 if TYPE_CHECKING:
@@ -40,7 +40,7 @@ class MowDeckEntity(CoordinatorEntity[MowDeckCoordinator]):
             manufacturer=MANUFACTURER,
             model=caps.get("model") or mower.get("model"),
             serial_number=mower.get("serial"),
-            sw_version=state.get("firmware"),
+            sw_version=state.get("firmware") or (state.get("firmware_info") or {}).get("installed"),
             configuration_url=f"{coordinator.client.base_url}/mowers/{mower_id}",
         )
 
@@ -49,15 +49,24 @@ class MowDeckEntity(CoordinatorEntity[MowDeckCoordinator]):
         """The newest state of the mower (empty while unknown)."""
         return self.coordinator.data.states.get(self.mower_id) or {}
 
+    @property
+    def capabilities(self) -> dict[str, Any]:
+        """The mower's capabilities (empty while unknown)."""
+        return self.coordinator.data.capabilities.get(self.mower_id) or {}
+
     async def async_send_command(self, command: dict[str, Any]) -> dict[str, Any]:
         """Send a Fleet command; API errors become translated Home Assistant errors."""
         try:
             return await self.coordinator.client.send_command(self.mower_id, command)
         except MowDeckForbiddenError as err:
+            kind = str(command["kind"])
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="command_forbidden",
-                translation_placeholders={"command": str(command["kind"])},
+                translation_placeholders={
+                    "command": kind,
+                    "permission": COMMAND_PERMISSION.get(kind, DEFAULT_COMMAND_PERMISSION),
+                },
             ) from err
         except MowDeckError as err:
             raise HomeAssistantError(

@@ -2,7 +2,7 @@
 
 Deliberately self-contained: HACS installs only this folder, so nothing here may depend on
 the MowDeck Python libraries. Field names follow the OpenAPI documents of the services
-(``apps/web/openapi/*.json`` in the monorepo).
+(``apps/web/openapi/*.json`` in lukislp/mowdeck).
 """
 
 from __future__ import annotations
@@ -353,6 +353,13 @@ class MowDeckClient:
         except MowDeckNotFoundError:
             return None
         return dict(body) if body is not None else None
+
+    async def get_health(self, mower_id: str) -> dict[str, Any] | None:
+        """``GET /telemetry/mowers/{id}/health``: running totals; None before any telemetry."""
+        try:
+            return dict(await self._request("GET", f"{TELEMETRY}/mowers/{mower_id}/health"))
+        except MowDeckNotFoundError:
+            return None
 
 
 class _RetryableStatusError(Exception):
