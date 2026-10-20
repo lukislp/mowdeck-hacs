@@ -15,6 +15,8 @@ dev = [
   # pytest-homeassistant-custom-component pins the matching homeassistant release exactly.
   "homeassistant==2026.10.0",
   "pytest-homeassistant-custom-component==0.13.371",
+  # The camera platform imports PyTurboJPEG (a requirement of the camera component).
+  "PyTurboJPEG==1.8.3",
   "mypy>=1.13.0",
   "ruff>=0.8.4",
 ]

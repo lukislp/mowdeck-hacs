@@ -19,6 +19,7 @@ API_TOKEN = "mdk_test_token"  # noqa: S105 - test fixture
 ACCOUNT_ID = "4f9c3a0e-7d1b-4c55-9a51-0b7d6f1e2a10"
 OTHER_ACCOUNT_ID = "0e2a9c51-1b7d-4f6e-8a10-5c3d7f9a0b11"
 MOWER_ID = "9a5c2d6e-3f10-4b8a-9c7e-1d2f3a4b5c6d"
+ANSWER_SDP = "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\n"
 
 
 def now_iso() -> str:
@@ -94,6 +95,28 @@ class FakeMowDeck:
     _access_tokens: dict[str, str] = field(default_factory=dict)
     _sockets: list[web.WebSocketResponse] = field(default_factory=list)
     _counter: itertools.count[int] = field(default_factory=itertools.count)
+    # Camera relay (Fleet's camera session API and MediaMTX's WHEP behind /media/whep).
+    cameras: list[dict[str, Any]] = field(
+        default_factory=lambda: [
+            {"id": "0", "name": "Front left", "uid": 1, "placement": "front_left"},
+            {"id": "1", "name": "Front right", "uid": 2, "placement": "front_right"},
+            {"id": "2", "name": "Rear", "uid": 3, "placement": "rear"},
+        ]
+    )
+    camera_available: dict[str, bool | None] = field(
+        default_factory=lambda: {"0": True, "1": True, "2": False}
+    )
+    heartbeat_seconds: float = 15
+    camera_problem: tuple[int, str] | None = None
+    leases: dict[str, dict[str, Any]] = field(default_factory=dict)
+    lease_history: list[str] = field(default_factory=list)
+    renewals: int = 0
+    whep_starting: int = 0
+    whep_status: int | None = None
+    whep_offers: list[dict[str, Any]] = field(default_factory=list)
+    whep_sessions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    whep_patches: list[dict[str, Any]] = field(default_factory=list)
+    whep_deletes: list[str] = field(default_factory=list)
     server: TestServer | None = None
 
     def __post_init__(self) -> None:
@@ -183,6 +206,14 @@ class FakeMowDeck:
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/map", self._map)
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/health", self._health)
         app.router.add_get("/api/v1/realtime/ws", self._ws)
+        camera = "/api/v1/fleet/mowers/{mower_id}/camera/session"
+        app.router.add_post(camera, self._camera_open)
+        app.router.add_post(camera + "/{lease_id}/renew", self._camera_renew)
+        app.router.add_delete(camera + "/{lease_id}", self._camera_close)
+        whep = "/media/whep/r/{relay_id}/{camera}/whep"
+        app.router.add_post(whep, self._whep_offer)
+        app.router.add_patch(whep + "/{secret}", self._whep_patch)
+        app.router.add_delete(whep + "/{secret}", self._whep_delete)
         return app
 
     @web.middleware
@@ -191,7 +222,10 @@ class FakeMowDeck:
         if self.fail_requests > 0 and request.path != "/api/v1/realtime/ws":
             self.fail_requests -= 1
             return problem(503, "Service unavailable", "try again")
-        public = request.path in ("/api/v1/identity/token", "/api/v1/realtime/ws")
+        public = request.path in (
+            "/api/v1/identity/token",
+            "/api/v1/realtime/ws",
+        ) or request.path.startswith("/media/whep/")
         if not public:
             auth = request.headers.get("Authorization", "")
             token = auth.removeprefix("Bearer ")
@@ -341,6 +375,137 @@ class FakeMowDeck:
         if mower_id not in self.health:
             return problem(404, "Not found", "no telemetry yet")
         return web.json_response(self.health[mower_id])
+
+    # Camera relay
+
+    def _relay_session(self, lease_id: str) -> dict[str, Any]:
+        lease = self.leases[lease_id]
+        lease["ticket"] = f"ticket-{next(self._counter)}"
+        relay_id = lease["relay_id"]
+        return {
+            "provider": "relay",
+            "app_id": "",
+            "channel": "",
+            "token": "",
+            "uid": 0,
+            "expires_at": now_iso(),
+            "cameras": self.cameras,
+            "relay": {
+                "tiles": [
+                    {
+                        "camera_id": c["id"],
+                        "whep_url": f"/media/whep/r/{relay_id}/{c['id']}/whep",
+                        "available": self.camera_available.get(c["id"]),
+                    }
+                    for c in self.cameras
+                ],
+                "ticket": lease["ticket"],
+                "lease_id": lease_id,
+                "heartbeat_seconds": self.heartbeat_seconds,
+            },
+        }
+
+    def _own_lease(self, request: web.Request) -> dict[str, Any] | None:
+        lease = self.leases.get(request.match_info["lease_id"])
+        if lease is None or lease["api_token"] != request["api_token"]:
+            return None
+        if lease["mower_id"] != request.match_info["mower_id"]:
+            return None
+        return lease
+
+    async def _camera_open(self, request: web.Request) -> web.Response:
+        mower_id = request.match_info["mower_id"]
+        if mower_id not in {m["id"] for m in self._visible(request)}:
+            return problem(404, "Not found", "mower not found")
+        body = await request.json()
+        assert body == {"transport": "relay"}
+        if self.camera_problem is not None:
+            status, slug = self.camera_problem
+            return problem(status, slug.replace("-", " ").capitalize(), slug)
+        lease_id = str(uuid.uuid4())
+        self.leases[lease_id] = {
+            "api_token": request["api_token"],
+            "mower_id": mower_id,
+            "relay_id": uuid.uuid4().hex,
+        }
+        self.lease_history.append(lease_id)
+        return web.json_response(self._relay_session(lease_id))
+
+    async def _camera_renew(self, request: web.Request) -> web.Response:
+        if self._own_lease(request) is None:
+            return problem(404, "Not found", "camera session not found")
+        self.renewals += 1
+        return web.json_response(self._relay_session(request.match_info["lease_id"]))
+
+    async def _camera_close(self, request: web.Request) -> web.Response:
+        lease_id = request.match_info["lease_id"]
+        if lease_id in self.leases and self._own_lease(request) is None:
+            return problem(404, "Not found", "camera session not found")
+        self.drop_lease(lease_id)
+        return web.Response(status=204)
+
+    def drop_lease(self, lease_id: str) -> None:
+        """End a lease and its WHEP readers (as the relay does when it expires)."""
+        self.leases.pop(lease_id, None)
+        self.whep_sessions = {
+            k: v for k, v in self.whep_sessions.items() if v["lease_id"] != lease_id
+        }
+
+    def _ticket_lease(self, request: web.Request) -> str | None:
+        ticket = request.headers.get("Authorization", "").removeprefix("Bearer ")
+        relay_id = request.match_info["relay_id"]
+        for lease_id, lease in self.leases.items():
+            if lease.get("ticket") == ticket and lease["relay_id"] == relay_id:
+                return lease_id
+        return None
+
+    async def _whep_offer(self, request: web.Request) -> web.Response:
+        offer = await request.text()
+        self.whep_offers.append(
+            {
+                "path": request.path,
+                "authorization": request.headers.get("Authorization"),
+                "content_type": request.content_type,
+                "offer": offer,
+            }
+        )
+        lease_id = self._ticket_lease(request)
+        if lease_id is None:
+            return web.Response(status=401)
+        if self.whep_status is not None:
+            return web.Response(status=self.whep_status)
+        if self.whep_starting > 0:
+            self.whep_starting -= 1
+            return web.Response(status=404, text="no stream is available on path")
+        secret = str(uuid.uuid4())
+        relay_id, camera = request.match_info["relay_id"], request.match_info["camera"]
+        self.whep_sessions[secret] = {"lease_id": lease_id, "camera": camera}
+        return web.Response(
+            status=201,
+            text=ANSWER_SDP,
+            content_type="application/sdp",
+            headers={"Location": f"/r/{relay_id}/{camera}/whep/{secret}"},
+        )
+
+    async def _whep_patch(self, request: web.Request) -> web.Response:
+        secret = request.match_info["secret"]
+        if secret not in self.whep_sessions:
+            return web.Response(status=404)
+        self.whep_patches.append(
+            {
+                "secret": secret,
+                "content_type": request.content_type,
+                "fragment": await request.text(),
+                "authorization": request.headers.get("Authorization"),
+            }
+        )
+        return web.Response(status=204)
+
+    async def _whep_delete(self, request: web.Request) -> web.Response:
+        secret = request.match_info["secret"]
+        self.whep_deletes.append(secret)
+        self.whep_sessions.pop(secret, None)
+        return web.Response(status=200)
 
     # Realtime
 

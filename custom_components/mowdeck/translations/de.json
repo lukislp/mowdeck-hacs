@@ -70,6 +70,26 @@
         "name": "Zur Station"
       }
     },
+    "camera": {
+      "camera": {
+        "name": "Kamera"
+      },
+      "camera_front_left": {
+        "name": "Kamera vorne links"
+      },
+      "camera_front_right": {
+        "name": "Kamera vorne rechts"
+      },
+      "camera_front": {
+        "name": "Kamera vorne"
+      },
+      "camera_rear": {
+        "name": "Kamera hinten"
+      },
+      "camera_other": {
+        "name": "Kamera {name}"
+      }
+    },
     "device_tracker": {
       "position": {
         "name": "Position"
@@ -208,6 +228,39 @@
     },
     "command_forbidden": {
       "message": "Das API-Token darf {command} nicht senden. Gib dem Token in der MowDeck-App die Berechtigung {permission}."
+    },
+    "camera_relay_unsupported": {
+      "message": "Das Kamera-Relay von MowDeck kann diesen Mäher nicht bedienen. Aktiviere in MowDeck das Kamera-Relay (und für Mammotion-Mäher die Agora-Bridge)"
+    },
+    "camera_unsupported": {
+      "message": "Dieser Mäher hat keine Kamera, die MowDeck zeigen kann"
+    },
+    "camera_budget": {
+      "message": "Ein Kamera-Limit des Mähers hat den Stream abgelehnt (Videobudget oder Akku)"
+    },
+    "camera_forbidden": {
+      "message": "MowDeck hat die Kamera abgelehnt: Der Tarif enthält keine Kamera oder dem API-Token fehlt mower.view"
+    },
+    "camera_not_found": {
+      "message": "Der Mäher ist für das API-Token nicht sichtbar"
+    },
+    "camera_unavailable": {
+      "message": "Die Kamera ist gerade nicht erreichbar: MowDeck, sein Kamera-Relay oder der Mäher hat nicht geantwortet"
+    },
+    "camera_failed": {
+      "message": "Die Kamera konnte nicht gestartet werden, siehe Log"
+    },
+    "camera_refused": {
+      "message": "Der Medienserver von MowDeck hat den Stream abgelehnt"
+    },
+    "camera_missing": {
+      "message": "Der Mäher bietet diese Kamera in der aktuellen Sitzung nicht an"
+    },
+    "camera_starting_timeout": {
+      "message": "Die Kamera des Mähers ist nicht rechtzeitig gestartet. Versuche es gleich noch einmal"
+    },
+    "camera_lease_lost": {
+      "message": "Der Kamera-Stream wurde auf MowDeck-Seite beendet. Öffne die Kamera erneut"
     }
   },
   "issues": {

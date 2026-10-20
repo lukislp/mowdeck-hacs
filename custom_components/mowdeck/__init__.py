@@ -9,9 +9,11 @@ from homeassistant.const import CONF_URL, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
 from .api import MowDeckClient
+from .camera import storage_key as camera_storage_key
 from .const import CONF_API_TOKEN, DOMAIN
 from .coordinator import MowDeckCoordinator
 from .realtime import RealtimeClient
@@ -20,6 +22,7 @@ from .services import async_setup_services
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
+    Platform.CAMERA,
     Platform.DEVICE_TRACKER,
     Platform.LAWN_MOWER,
     Platform.NUMBER,
@@ -79,3 +82,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> b
 async def async_unload_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> bool:
     """Unload the platforms; the realtime task ends through ``async_on_unload``."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> None:
+    """Forget the entry's stored camera list."""
+    await Store[dict[str, object]](hass, 1, camera_storage_key(entry.entry_id)).async_remove()
