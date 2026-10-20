@@ -1,0 +1,29 @@
+name: Bug report
+description: Something in the Home Assistant integration does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versions
+      description: Integration release, Home Assistant version and MowDeck version.
+    validations:
+      required: true
+  - type: input
+    id: mower
+    attributes:
+      label: Mower and link
+      description: Mower model and firmware, and the link in use (cloud, Bluetooth bridge, simulator).
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, diagnostics or screenshots
+      description: Relevant log lines (logger custom_components.mowdeck) or the diagnostics download. Please remove tokens, the URL of your installation, serial numbers and positions.
+      render: text

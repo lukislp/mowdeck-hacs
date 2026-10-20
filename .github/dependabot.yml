@@ -1,0 +1,30 @@
+# Daily dependency PRs in the same shape as the other lukislp repositories: fix(...) commit
+# prefixes, at most two open PRs per ecosystem. The integration itself has no Python
+# requirements (manifest.json "requirements": []); uv.lock only pins the development tools.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: "fix(ci)"
+    reviewers:
+      - "lukislp"
+    open-pull-requests-limit: 2
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: daily
+    # pytest-homeassistant-custom-component pins one Home Assistant release exactly, so both
+    # pins move in one PR; a bump of only one of them can never resolve.
+    groups:
+      home-assistant:
+        patterns:
+          - "homeassistant"
+          - "pytest-homeassistant-custom-component"
+    commit-message:
+      prefix: "fix(deps)"
+    reviewers:
+      - "lukislp"
+    open-pull-requests-limit: 2

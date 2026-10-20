@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/lukislp/mowdeck-hacs/security/advisories/new
+    about: Please report security problems privately here, not as a public issue.
+  - name: MowDeck itself (services, web app, mower adapters)
+    url: https://github.com/lukislp/mowdeck/issues
+    about: Problems outside the Home Assistant integration belong to the MowDeck repository.

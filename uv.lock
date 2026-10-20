@@ -1432,7 +1432,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/9a/02/cef85a80ff6d3092a
 
 [[package]]
 name = "mowdeck-home-assistant"
-version = "0.1.0"
+version = "0.0.0"
 source = { virtual = "." }
 
 [package.dev-dependencies]
