@@ -208,7 +208,19 @@
         "name": "Distance driven"
       },
       "battery_cycles": {
-        "name": "Battery cycles"
+        "name": "Battery cycles",
+        "state_attributes": {
+          "source": {
+            "name": "Source",
+            "state": {
+              "device": "Mower (lifetime counter)",
+              "telemetry": "MowDeck"
+            }
+          },
+          "tracked_cycles": {
+            "name": "MowDeck count"
+          }
+        }
       }
     },
     "switch": {

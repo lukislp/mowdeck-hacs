@@ -192,7 +192,46 @@ async def test_health_sensors(hass: HomeAssistant) -> None:
     distance = state_of(hass, "sensor.luba_distance_driven")
     assert distance.attributes["unit_of_measurement"] == "km"
     assert float(distance.state) == pytest.approx(12.346, abs=0.001)
-    assert state_of(hass, "sensor.luba_battery_cycles").state == "17"
+    cycles = state_of(hass, "sensor.luba_battery_cycles")
+    assert cycles.state == "17"
+    # the fake answers like MowDeck before the source fields: its own count
+    assert (cycles.attributes["source"], cycles.attributes["tracked_cycles"]) == ("telemetry", 17)
+
+
+async def test_battery_cycles_from_the_device_counter(
+    hass: HomeAssistant, fake_api: FakeMowDeck, loaded_entry: MockConfigEntry
+) -> None:
+    """With battery_cycles_source device the mower's lifetime counter is shown."""
+    fake_api.health[MOWER_ID].update(
+        {
+            "battery_cycles": 152,
+            "battery_cycles_tracked": 2,
+            "device_battery_cycles": 152,
+            "battery_cycles_source": "device",
+        }
+    )
+    coordinator = loaded_entry.runtime_data.coordinator
+    coordinator._static_fetched_at.clear()
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    cycles = state_of(hass, "sensor.luba_battery_cycles")
+    assert cycles.state == "152"
+    assert (cycles.attributes["source"], cycles.attributes["tracked_cycles"]) == ("device", 2)
+
+    fake_api.health[MOWER_ID].update(
+        {
+            "battery_cycles": 3,
+            "battery_cycles_tracked": 3,
+            "device_battery_cycles": None,
+            "battery_cycles_source": "telemetry",
+        }
+    )
+    coordinator._static_fetched_at.clear()
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    cycles = state_of(hass, "sensor.luba_battery_cycles")
+    assert cycles.state == "3"
+    assert (cycles.attributes["source"], cycles.attributes["tracked_cycles"]) == ("telemetry", 3)
 
 
 async def test_blade_hours_from_the_device_counter(

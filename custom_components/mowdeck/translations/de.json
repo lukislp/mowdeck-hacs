@@ -208,7 +208,19 @@
         "name": "Gefahrene Strecke"
       },
       "battery_cycles": {
-        "name": "Akkuzyklen"
+        "name": "Akkuzyklen",
+        "state_attributes": {
+          "source": {
+            "name": "Quelle",
+            "state": {
+              "device": "Mäher (Gesamtzähler)",
+              "telemetry": "MowDeck"
+            }
+          },
+          "tracked_cycles": {
+            "name": "Zählung von MowDeck"
+          }
+        }
       }
     },
     "switch": {

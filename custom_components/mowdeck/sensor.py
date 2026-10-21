@@ -101,6 +101,31 @@ def _blade_hours(data: MowerData) -> Any:
     return data.health.get("blade_hours_since_change")
 
 
+def _battery_cycles(data: MowerData) -> Any:
+    """Battery cycles as MowDeck shows them: the mower's own lifetime counter when it reports
+    one (``battery_cycles_source`` device), MowDeck's count otherwise. MowDeck before the
+    source fields answers its own count in ``battery_cycles``."""
+    health = data.health
+    if health.get("battery_cycles_source") == "device":
+        device = health.get("device_battery_cycles")
+        if device is not None:
+            return device
+    return health.get("battery_cycles")
+
+
+def _battery_cycle_attributes(health: dict[str, Any]) -> dict[str, Any]:
+    """Where the battery cycles come from (``device`` or ``telemetry``) and MowDeck's own
+    count; MowDeck before the source fields only has its own count."""
+    device = health.get("battery_cycles_source") == "device" and (
+        health.get("device_battery_cycles") is not None
+    )
+    tracked = health.get("battery_cycles_tracked", None if device else health.get("battery_cycles"))
+    return {
+        "source": "device" if device else "telemetry",
+        "tracked_cycles": tracked,
+    }
+
+
 def _bridge_rssi(data: MowerData) -> Any:
     link = (data.state.get("links") or {}).get(BLE_BRIDGE)
     return link.get("rssi") if isinstance(link, dict) else None
@@ -220,7 +245,7 @@ SENSORS: tuple[MowDeckSensorDescription, ...] = (
         key="battery_cycles",
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=_number(lambda d: d.health.get("battery_cycles")),
+        value_fn=_number(_battery_cycles),
     ),
 )
 
@@ -265,9 +290,13 @@ class MowDeckSensor(MowDeckEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Next to the error code: its message, category and source, and whether driving
-        the mower may free it. Category and source are adapter extras (``raw``), so they are
-        only shown while an error code is set and may be missing for other manufacturers."""
+        """Battery cycles: their source and MowDeck's own count. Next to the error code: its
+        message, category and source, and whether driving the mower may free it. Category and
+        source are adapter extras (``raw``), so they are only shown while an error code is set
+        and may be missing for other manufacturers."""
+        if self.entity_description.key == "battery_cycles":
+            health = self.coordinator.data.health.get(self.mower_id)
+            return _battery_cycle_attributes(health) if health else None
         if self.entity_description.key != "error_code":
             return None
         state = self.mower_state
