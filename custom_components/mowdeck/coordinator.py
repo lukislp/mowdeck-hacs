@@ -1,8 +1,10 @@
-"""Coordinator of one MowDeck config entry: mowers, states, capabilities and maps.
+"""Coordinator of one MowDeck config entry: mowers, states, capabilities, maps, permissions.
 
 States arrive by push over the Realtime WebSocket (``async_push_state``); polling is the
 fallback (every ``poll_interval`` seconds while the socket is down) and discovers new mowers
-(every ``PUSH_POLL_INTERVAL`` while it is up).
+(every ``PUSH_POLL_INTERVAL`` while it is up). Capabilities, maps and the token's permissions
+on each mower are refetched every ``STATIC_REFRESH``. Slower data (the health totals) lives in
+its own coordinator, so one failing service never blocks the others.
 """
 
 from __future__ import annotations
@@ -15,17 +17,21 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import MowDeckAuthError, MowDeckClient, MowDeckError
+from .api import MowDeckAuthError, MowDeckClient, MowDeckError, MowDeckForbiddenError
 from .const import (
     ALL_AREAS,
     AREA_FALLBACK,
     CONF_POLL_INTERVAL,
     DEFAULT_POLL_INTERVAL,
     DOMAIN,
+    ISSUE_FORBIDDEN,
     PUSH_POLL_INTERVAL,
+    RELATION_PERMISSION,
     STALE_AFTER,
     STATIC_REFRESH,
 )
@@ -65,7 +71,9 @@ class MowDeckData:
     capabilities: dict[str, dict[str, Any]] = field(default_factory=dict)
     maps: dict[str, dict[str, Any]] = field(default_factory=dict)
     map_revisions: dict[str, str] = field(default_factory=dict)
-    health: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Relations the token holds on each mower (keys of RELATION_PERMISSION); a mower is
+    # missing while unknown (MowDeck without the permission endpoint, or the check failed).
+    permissions: dict[str, frozenset[str]] = field(default_factory=dict)
 
 
 class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
@@ -109,18 +117,24 @@ class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
                     data.states[mower_id] = snapshot["state"]
                     data.received_at[mower_id] = received
                     data.stale[mower_id] = bool(snapshot.get("stale", False))
-            for mower_id in data.mowers:
-                fetched = self._static_fetched_at.get(mower_id)
-                if fetched is None or now - fetched >= STATIC_REFRESH:
-                    await self._async_fetch_static(data, mower_id)
-                    self._static_fetched_at[mower_id] = now
+            self._async_remove_stale_devices(set(data.mowers))
+            due = [
+                mower_id
+                for mower_id in data.mowers
+                if (fetched := self._static_fetched_at.get(mower_id)) is None
+                or now - fetched >= STATIC_REFRESH
+            ]
+            for mower_id in due:
+                await self._async_fetch_static(data, mower_id)
+                self._static_fetched_at[mower_id] = now
+            if due:
+                await self._async_fetch_permissions(data, due)
         except MowDeckAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except MowDeckError as err:
             raise UpdateFailed(str(err)) from err
         for mower_id in set(data.states) - set(data.mowers):
             data.states.pop(mower_id, None)
-            data.health.pop(mower_id, None)
         return data
 
     async def _async_fetch_static(self, data: MowDeckData, mower_id: str) -> None:
@@ -131,9 +145,37 @@ class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
         if mower_map is not None:
             data.maps[mower_id] = dict(mower_map.get("map") or {})
             data.map_revisions[mower_id] = str(mower_map.get("revision", ""))
-        health = await self.client.get_health(mower_id)
-        if health is not None:
-            data.health[mower_id] = health
+
+    async def _async_fetch_permissions(self, data: MowDeckData, mower_ids: list[str]) -> None:
+        """Ask which relations the token holds on these mowers.
+
+        A failure leaves the permissions unknown, which never hides an entity: the API still
+        refuses what the token may not do, with an error that names the permission."""
+        relations = list(RELATION_PERMISSION)
+        checks = [(relation, f"mower:{m}") for m in mower_ids for relation in relations]
+        try:
+            answers = await self.client.check_permissions(checks)
+        except MowDeckAuthError:
+            raise
+        except MowDeckError as err:
+            _LOGGER.debug("Permission check failed, permissions stay unknown: %s", err)
+            return
+        for index, mower_id in enumerate(mower_ids):
+            held = answers[index * len(relations) : (index + 1) * len(relations)]
+            data.permissions[mower_id] = frozenset(
+                relation for relation, ok in zip(relations, held, strict=True) if ok
+            )
+
+    @callback
+    def _async_remove_stale_devices(self, mower_ids: set[str]) -> None:
+        """Detach the devices of mowers the token no longer sees (only after a listing)."""
+        registry = dr.async_get(self.hass)
+        entry_id = self.config_entry.entry_id
+        for device in dr.async_entries_for_config_entry(registry, entry_id):
+            ids = {identifier for domain, identifier in device.identifiers if domain == DOMAIN}
+            if ids and not ids & mower_ids:
+                _LOGGER.debug("Removing the device of %s: no longer visible to the token", ids)
+                registry.async_update_device(device.id, remove_config_entry_id=entry_id)
 
     @callback
     def async_push_state(self, mower_id: str, state: dict[str, Any]) -> None:
@@ -162,11 +204,51 @@ class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
         self.update_interval = PUSH_POLL_INTERVAL if connected else self.poll_interval
         self.async_update_listeners()
 
+    @callback
+    def async_merge_firmware(self, mower_id: str, info: dict[str, Any]) -> None:
+        """A fresh ``FirmwareInfo`` from a firmware check: show it before the next state."""
+        state = self.data.states.get(mower_id)
+        if state is None:
+            return
+        self.data.states[mower_id] = {**state, "firmware_info": dict(info)}
+        self.async_update_listeners()
+
     # Read helpers for the entities
 
     def state(self, mower_id: str) -> dict[str, Any] | None:
         """The newest state of a mower, if any."""
         return self.data.states.get(mower_id)
+
+    def permitted(self, mower_id: str, relation: str) -> bool:
+        """The token holds ``relation`` on the mower, or that is unknown (never hide on doubt)."""
+        held = self.data.permissions.get(mower_id)
+        return held is None or relation in held
+
+    def fingerprint(self, mower_id: str) -> tuple[Any, ...]:
+        """What decides which entities a mower has: capabilities, permissions and map areas.
+
+        The platforms re-evaluate a mower's entities whenever this changes."""
+        caps = self.data.capabilities.get(mower_id) or {}
+        return (
+            repr(sorted(caps.items())),
+            self.data.permissions.get(mower_id),
+            tuple(str(area["id"]) for area in self.areas(mower_id)),
+        )
+
+    def model(self, mower_id: str) -> str | None:
+        """The model name: from the capabilities, else from Fleet."""
+        caps = self.data.capabilities.get(mower_id) or {}
+        mower = self.data.mowers.get(mower_id) or {}
+        model = caps.get("model") or mower.get("model")
+        return str(model) if model else None
+
+    def firmware_version(self, mower_id: str) -> str | None:
+        """The firmware running on the mower, if reported."""
+        state = self.data.states.get(mower_id) or {}
+        info = state.get("firmware_info")
+        installed = info.get("installed") if isinstance(info, dict) else None
+        version = state.get("firmware") or installed
+        return str(version) if version else None
 
     def is_online(self, mower_id: str) -> bool:
         """The gateway holds a live link to the mower (ADR 0040 in lukislp/mowdeck).
@@ -214,3 +296,84 @@ class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
         if selected != ALL_AREAS and selected in all_ids:
             return [selected]
         return all_ids
+
+
+class MowDeckServiceCoordinator[T](DataUpdateCoordinator[T]):
+    """Polls one further MowDeck service (health, scheduler, ...) next to the state coordinator.
+
+    Failures stay with the service: its entities turn unavailable, the rest keeps working. A
+    403 raises a Repairs issue ``<service>_forbidden`` that names the missing permission and
+    disappears with the next successful poll; a 401 starts the reauth flow as everywhere.
+    """
+
+    config_entry: MowDeckConfigEntry
+    service: str
+    permission: str
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: MowDeckConfigEntry,
+        state: MowDeckCoordinator,
+        *,
+        update_interval: timedelta | None,
+    ) -> None:
+        """Create the coordinator; ``state`` provides the client and the mower list."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            config_entry=entry,
+            name=f"{DOMAIN} {self.service}",
+            update_interval=update_interval,
+        )
+        self.state = state
+        self.client = state.client
+        self.forbidden = False
+
+    @property
+    def issue_id(self) -> str:
+        """Repairs issue id of this service and entry."""
+        return f"{ISSUE_FORBIDDEN.format(service=self.service)}_{self.config_entry.entry_id}"
+
+    async def _async_fetch(self) -> T:  # pragma: no cover - every service overrides it
+        """Fetch the service's data (raises MowDeck errors)."""
+        raise NotImplementedError
+
+    async def _async_update_data(self) -> T:
+        try:
+            data = await self._async_fetch()
+        except MowDeckAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
+        except MowDeckForbiddenError as err:
+            self._async_set_forbidden(True)
+            raise UpdateFailed(str(err)) from err
+        except MowDeckError as err:
+            raise UpdateFailed(str(err)) from err
+        self._async_set_forbidden(False)
+        return data
+
+    @callback
+    def _async_set_forbidden(self, forbidden: bool) -> None:
+        if forbidden == self.forbidden:
+            return
+        self.forbidden = forbidden
+        if not forbidden:
+            ir.async_delete_issue(self.hass, DOMAIN, self.issue_id)
+            return
+        _LOGGER.warning(
+            "MowDeck refuses the %s data to this API token (403); grant %s",
+            self.service,
+            self.permission,
+        )
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            self.issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_FORBIDDEN.format(service=self.service),
+            translation_placeholders={
+                "url": self.client.base_url,
+                "permission": self.permission,
+            },
+        )

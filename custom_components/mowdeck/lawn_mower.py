@@ -1,4 +1,4 @@
-"""Lawn mower entity: activity, start, pause and dock, plus the MowDeck entity services."""
+"""Lawn mower entity: activity, start, pause, dock and stop, plus the MowDeck entity services."""
 
 from __future__ import annotations
 
@@ -55,6 +55,7 @@ class MowDeckLawnMower(MowDeckEntity, LawnMowerEntity):
         LawnMowerEntityFeature.START_MOWING
         | LawnMowerEntityFeature.PAUSE
         | LawnMowerEntityFeature.DOCK
+        | LawnMowerEntityFeature.STOP
     )
 
     def __init__(self, coordinator: MowDeckCoordinator, mower_id: str) -> None:
@@ -79,8 +80,12 @@ class MowDeckLawnMower(MowDeckEntity, LawnMowerEntity):
         await self.async_send_command({"kind": "pause_mow"})
 
     async def async_dock(self) -> None:
-        """Return to the dock."""
+        """Return to the dock (a running job is paused and can be resumed)."""
         await self.async_send_command({"kind": "return_to_dock"})
+
+    async def async_stop(self) -> None:
+        """End the job and return to the dock (``return_to_dock`` with ``end_job``)."""
+        await self.async_send_command({"kind": "return_to_dock", "end_job": True})
 
     # Entity services (registered in services.py)
 

@@ -14,7 +14,7 @@ from homeassistant.components.number import (
     NumberEntityDescription,
     NumberMode,
 )
-from homeassistant.const import EntityCategory, UnitOfLength, UnitOfSpeed
+from homeassistant.const import EntityCategory, Platform, UnitOfLength, UnitOfSpeed
 from homeassistant.core import HomeAssistant
 
 from .const import (
@@ -64,7 +64,7 @@ async def async_setup_entry(
             numbers.append(DriveSpeedNumber(coordinator, mower_id))
         return numbers
 
-    async_add_mower_entities(entry, async_add_entities, entities)
+    async_add_mower_entities(entry, async_add_entities, entities, domain=Platform.NUMBER)
 
 
 class BladeHeightNumber(MowDeckEntity, NumberEntity):

@@ -24,6 +24,9 @@ FLEET = "/api/v1/fleet"
 TELEMETRY = "/api/v1/telemetry"
 REALTIME_WS = "/api/v1/realtime/ws"
 
+# Questions per ``POST /identity/me/permissions`` (the API accepts up to 100).
+PERMISSION_BATCH = 100
+
 # Statuses worth retrying for idempotent requests.
 _RETRY_STATUSES = frozenset({502, 503, 504})
 
@@ -306,6 +309,26 @@ class MowDeckClient:
         """``GET /identity/me``: the token's subject, account and permissions."""
         return dict(await self._request("GET", f"{IDENTITY}/me"))
 
+    async def check_permissions(self, checks: list[tuple[str, str]]) -> list[bool]:
+        """``POST /identity/me/permissions``: may the token do ``relation`` on ``object``?
+
+        ``checks`` are ``(relation, object)`` pairs such as ``("can_control", "mower:<id>")``;
+        the answers come back in the same order. Asked in batches of ``PERMISSION_BATCH``.
+        """
+        answers: list[bool] = []
+        for start in range(0, len(checks), PERMISSION_BATCH):
+            batch = checks[start : start + PERMISSION_BATCH]
+            body = await self._request(
+                "POST",
+                f"{IDENTITY}/me/permissions",
+                json={"checks": [{"relation": r, "object": o} for r, o in batch]},
+            )
+            if not isinstance(body, list) or len(body) != len(batch):
+                msg = "permission check returned an unexpected answer"
+                raise MowDeckConnectionError(msg)
+            answers.extend(bool(answer) for answer in body)
+        return answers
+
     # Fleet
 
     async def list_mowers(self) -> list[dict[str, Any]]:
@@ -323,6 +346,11 @@ class MowDeckClient:
         return dict(
             await self._request("POST", f"{FLEET}/mowers/{mower_id}/commands", json=payload)
         )
+
+    async def check_firmware(self, mower_id: str) -> dict[str, Any]:
+        """``POST /fleet/mowers/{id}/firmware/check``: ask the vendor for updates now; the fresh
+        ``FirmwareInfo``. 409 when the connection cannot ask, 503 when the mower is offline."""
+        return dict(await self._request("POST", f"{FLEET}/mowers/{mower_id}/firmware/check"))
 
     async def get_command(self, command_id: str) -> dict[str, Any]:
         """``GET /fleet/commands/{id}``: the command record with its status."""
@@ -435,6 +463,16 @@ class MowDeckClient:
             return dict(await self._request("GET", f"{TELEMETRY}/mowers/{mower_id}/health"))
         except MowDeckNotFoundError:
             return None
+
+    async def reset_blade(self, mower_id: str, note: str | None = None) -> dict[str, Any]:
+        """``POST /telemetry/mowers/{id}/health/blade-reset``: record a blade change; the new
+        health totals (``can_manage_mowers``)."""
+        body: dict[str, Any] = {"note": note} if note else {}
+        return dict(
+            await self._request(
+                "POST", f"{TELEMETRY}/mowers/{mower_id}/health/blade-reset", json=body
+            )
+        )
 
 
 class _RetryableStatusError(Exception):

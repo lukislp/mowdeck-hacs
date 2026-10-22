@@ -1,4 +1,5 @@
-"""Config flow of the MowDeck integration: base URL and API token, reauth, options."""
+"""Config flow of the MowDeck integration: base URL and API token, reauth, reconfigure,
+options."""
 
 from __future__ import annotations
 
@@ -55,6 +56,12 @@ USER_SCHEMA = vol.Schema(
     }
 )
 REAUTH_SCHEMA = vol.Schema({vol.Required(CONF_API_TOKEN): TOKEN_SELECTOR})
+RECONFIGURE_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_URL): TextSelector(TextSelectorConfig(type=TextSelectorType.URL)),
+        vol.Optional(CONF_API_TOKEN): TOKEN_SELECTOR,
+    }
+)
 
 
 class InvalidUrlError(Exception):
@@ -159,6 +166,31 @@ class MowDeckConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=REAUTH_SCHEMA,
             errors=errors,
             description_placeholders={"url": entry.data[CONF_URL]},
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change the URL (MowDeck moved) and optionally the token; same account only."""
+        errors: dict[str, str] = {}
+        entry = self._get_reconfigure_entry()
+        if user_input is not None:
+            token = user_input.get(CONF_API_TOKEN) or entry.data[CONF_API_TOKEN]
+            info = await self._async_validate(user_input[CONF_URL], token, errors)
+            if info is not None:
+                await self.async_set_unique_id(info["account_id"])
+                self._abort_if_unique_id_mismatch(reason="wrong_account")
+                return self.async_update_reload_and_abort(
+                    entry, data_updates={CONF_URL: info["url"], CONF_API_TOKEN: token}
+                )
+        suggested = {CONF_URL: entry.data[CONF_URL]}
+        if user_input is not None:
+            suggested[CONF_URL] = user_input[CONF_URL]
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.add_suggested_values_to_schema(RECONFIGURE_SCHEMA, suggested),
+            errors=errors,
+            description_placeholders={"example_url": "https://mowdeck.example.ts.net"},
         )
 
     @staticmethod

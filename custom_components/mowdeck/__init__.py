@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_URL, Platform
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
@@ -16,6 +18,7 @@ from .api import MowDeckClient
 from .camera import storage_key as camera_storage_key
 from .const import CONF_API_TOKEN, DOMAIN
 from .coordinator import MowDeckCoordinator
+from .health import HealthCoordinator
 from .realtime import RealtimeClient
 from .services import async_setup_services
 
@@ -42,6 +45,7 @@ class MowDeckRuntimeData:
     client: MowDeckClient
     coordinator: MowDeckCoordinator
     realtime: RealtimeClient
+    health: HealthCoordinator
 
 
 type MowDeckConfigEntry = ConfigEntry[MowDeckRuntimeData]
@@ -69,7 +73,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> b
     realtime = RealtimeClient(
         hass, client, coordinator, entry_id=entry.entry_id, on_auth_failed=_auth_failed
     )
-    entry.runtime_data = MowDeckRuntimeData(client, coordinator, realtime)
+    health = HealthCoordinator(hass, entry, coordinator)
+    # The further services never block the setup; their entities wait for them.
+    await health.async_refresh()
+    entry.runtime_data = MowDeckRuntimeData(client, coordinator, realtime, health)
+    entry.async_on_unload(
+        coordinator.async_add_listener(_device_updater(hass, entry.entry_id, coordinator))
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -82,6 +92,49 @@ async def async_setup_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> b
 async def async_unload_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> bool:
     """Unload the platforms; the realtime task ends through ``async_on_unload``."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+def _device_updater(
+    hass: HomeAssistant, entry_id: str, coordinator: MowDeckCoordinator
+) -> CALLBACK_TYPE:
+    """A listener that keeps name, model and firmware of the mower devices current."""
+    known: dict[str, tuple[str | None, str | None, str | None]] = {}
+
+    @callback
+    def _update() -> None:
+        registry = dr.async_get(hass)
+        for mower_id, mower in coordinator.data.mowers.items():
+            info = (
+                mower.get("name"),
+                coordinator.model(mower_id),
+                coordinator.firmware_version(mower_id),
+            )
+            if known.get(mower_id) == info:
+                continue
+            device = registry.async_get_device_by_identifier((DOMAIN, mower_id), entry_id)
+            if device is None:
+                continue
+            known[mower_id] = info
+            name, model, firmware = info
+            changes: dict[str, Any] = {}
+            if name and device.name != name:
+                changes["name"] = name
+            if model and device.model != model:
+                changes["model"] = model
+            if firmware and device.sw_version != firmware:
+                changes["sw_version"] = firmware
+            if changes:
+                registry.async_update_device(device.id, **changes)
+
+    return _update
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: MowDeckConfigEntry, device: dr.DeviceEntry
+) -> bool:
+    """A mower's device can be deleted once the API token no longer sees the mower."""
+    mowers = entry.runtime_data.coordinator.data.mowers
+    return not any(domain == DOMAIN and ident in mowers for domain, ident in device.identifiers)
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> None:

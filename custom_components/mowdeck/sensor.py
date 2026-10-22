@@ -17,6 +17,7 @@ from homeassistant.const import (
     PERCENTAGE,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     EntityCategory,
+    Platform,
     UnitOfLength,
     UnitOfSpeed,
     UnitOfTime,
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
 
     from . import MowDeckConfigEntry
     from .coordinator import MowDeckCoordinator
+    from .health import HealthCoordinator
 
 PARALLEL_UPDATES = 0
 
@@ -126,6 +128,16 @@ def _battery_cycle_attributes(health: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _blade_attributes(health: dict[str, Any]) -> dict[str, Any]:
+    """The reminder threshold of the counter shown (the mower's own warning or MowDeck's
+    threshold) and when MowDeck last recorded a blade change."""
+    device = health.get("blade_source") == "device"
+    threshold = health.get("device_blade_warn_hours") if device else None
+    if threshold is None:
+        threshold = health.get("blade_hours_threshold")
+    return {"threshold": threshold, "changed_at": health.get("blade_changed_at")}
+
+
 def _bridge_rssi(data: MowerData) -> Any:
     link = (data.state.get("links") or {}).get(BLE_BRIDGE)
     return link.get("rssi") if isinstance(link, dict) else None
@@ -141,6 +153,8 @@ class MowDeckSensorDescription(SensorEntityDescription):
 
     value_fn: Callable[[MowerData], Any]
     exists_fn: Callable[[dict[str, Any]], bool] = lambda caps: True
+    # Read from the health coordinator (unavailable while the health totals fail).
+    health: bool = False
 
 
 SENSORS: tuple[MowDeckSensorDescription, ...] = (
@@ -169,6 +183,7 @@ SENSORS: tuple[MowDeckSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENUM,
         options=RTK_SOURCES,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=_enum(RTK_SOURCES, "rtk_source"),
     ),
     MowDeckSensorDescription(
@@ -176,6 +191,7 @@ SENSORS: tuple[MowDeckSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENUM,
         options=CONNECTION_KINDS,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=_enum(CONNECTION_KINDS, "connection"),
     ),
     MowDeckSensorDescription(
@@ -198,6 +214,7 @@ SENSORS: tuple[MowDeckSensorDescription, ...] = (
         key="last_seen",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=_timestamp,
     ),
     MowDeckSensorDescription(
@@ -211,11 +228,12 @@ SENSORS: tuple[MowDeckSensorDescription, ...] = (
         native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=_number(_bridge_rssi),
         exists_fn=_has_ble_bridge,
     ),
-    # Health totals of Telemetry (GET /telemetry/mowers/{id}/health), refreshed with the
-    # capabilities and the map (STATIC_REFRESH).
+    # Health totals of Telemetry (GET /telemetry/mowers/{id}/health) from the health
+    # coordinator (HEALTH_REFRESH).
     MowDeckSensorDescription(
         key="blade_hours",
         device_class=SensorDeviceClass.DURATION,
@@ -223,6 +241,7 @@ SENSORS: tuple[MowDeckSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
         value_fn=_number(_blade_hours, 2),
+        health=True,
     ),
     MowDeckSensorDescription(
         key="mowing_hours",
@@ -231,6 +250,7 @@ SENSORS: tuple[MowDeckSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=1,
         value_fn=_number(lambda d: d.health.get("mowing_hours"), 2),
+        health=True,
     ),
     MowDeckSensorDescription(
         key="mowing_distance",
@@ -240,12 +260,14 @@ SENSORS: tuple[MowDeckSensorDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         value_fn=_number(lambda d: d.health.get("distance_m")),
+        health=True,
     ),
     MowDeckSensorDescription(
         key="battery_cycles",
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=_number(_battery_cycles),
+        health=True,
     ),
 )
 
@@ -256,14 +278,16 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """The sensors of every mower (the bridge signal only where a bridge link exists)."""
+    health = entry.runtime_data.health
     async_add_mower_entities(
         entry,
         async_add_entities,
         lambda coordinator, m: [
-            MowDeckSensor(coordinator, m, d)
+            MowDeckSensor(coordinator, m, d, health if d.health else None)
             for d in SENSORS
             if d.exists_fn(coordinator.data.capabilities.get(m) or {})
         ],
+        domain=Platform.SENSOR,
     )
 
 
@@ -277,26 +301,36 @@ class MowDeckSensor(MowDeckEntity, SensorEntity):
         coordinator: MowDeckCoordinator,
         mower_id: str,
         description: MowDeckSensorDescription,
+        health: HealthCoordinator | None = None,
     ) -> None:
-        """Create the sensor from its description."""
-        super().__init__(coordinator, mower_id, description.key)
+        """Create the sensor from its description (``health`` for the health totals)."""
+        super().__init__(coordinator, mower_id, description.key, service=health)
         self.entity_description = description
+        self._health = health
+
+    def _totals(self) -> dict[str, Any]:
+        if self._health is None:
+            return {}
+        return self._health.data.totals.get(self.mower_id) or {}
 
     @property
     def native_value(self) -> Any:
         """The value read from the newest state or the health totals."""
-        health = self.coordinator.data.health.get(self.mower_id) or {}
-        return self.entity_description.value_fn(MowerData(self.mower_state, health))
+        return self.entity_description.value_fn(MowerData(self.mower_state, self._totals()))
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Battery cycles: their source and MowDeck's own count. Next to the error code: its
+        """Battery cycles: their source and MowDeck's own count. Blade hours: the reminder
+        threshold and the last recorded blade change. Next to the error code: its
         message, category and source, and whether driving the mower may free it. Category and
         source are adapter extras (``raw``), so they are only shown while an error code is set
         and may be missing for other manufacturers."""
         if self.entity_description.key == "battery_cycles":
-            health = self.coordinator.data.health.get(self.mower_id)
+            health = self._totals()
             return _battery_cycle_attributes(health) if health else None
+        if self.entity_description.key == "blade_hours":
+            health = self._totals()
+            return _blade_attributes(health) if health else None
         if self.entity_description.key != "error_code":
             return None
         state = self.mower_state

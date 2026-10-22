@@ -16,6 +16,7 @@ from homeassistant.components.update import (
     UpdateEntityDescription,
     UpdateEntityFeature,
 )
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .entity import MowDeckEntity, async_add_mower_entities
@@ -46,6 +47,7 @@ async def async_setup_entry(
             if (coordinator.data.capabilities.get(m) or {}).get("firmware_update")
             else []
         ),
+        domain=Platform.UPDATE,
     )
 
 

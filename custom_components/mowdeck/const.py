@@ -22,6 +22,8 @@ DEFAULT_EXPOSE_EMERGENCY_STOP: Final = True
 PUSH_POLL_INTERVAL: Final = timedelta(minutes=5)
 # Capabilities and maps change rarely; refetch them at most this often.
 STATIC_REFRESH: Final = timedelta(minutes=10)
+# Health totals (blade hours, mowing hours, distance, battery cycles) change slowly.
+HEALTH_REFRESH: Final = timedelta(minutes=15)
 # A state older than this counts as offline (Telemetry's own stale flag also counts).
 STALE_AFTER: Final = timedelta(minutes=5)
 
@@ -35,6 +37,8 @@ AREA_FALLBACK: Final = {"en": "Area {n}", "de": "Bereich {n}"}
 EVENT_COMMAND_RESULT: Final = "mowdeck_command_result"
 
 ISSUE_REALTIME_UNAUTHORIZED: Final = "realtime_unauthorized"
+# Repairs issue of a polled MowDeck service that answers 403 ("<service>_forbidden").
+ISSUE_FORBIDDEN: Final = "{service}_forbidden"
 
 # Limits of the Fleet command API (CommandRequest in apps/web/openapi/fleet.json).
 API_BLADE_HEIGHT_MIN_MM: Final = 10
@@ -56,3 +60,16 @@ COMMAND_PERMISSION: Final = {
     "firmware_update": "fleet.manage",
 }
 DEFAULT_COMMAND_PERMISSION: Final = "mower.control"
+
+# Relations asked per mower with POST /identity/me/permissions, and the token permission that
+# grants each one (named in errors and in the README).
+CAN_CONTROL: Final = "can_control"
+CAN_DRIVE: Final = "can_drive"
+CAN_MANAGE_MOWERS: Final = "can_manage_mowers"
+CAN_EDIT_SCHEDULE: Final = "can_edit_schedule"
+RELATION_PERMISSION: Final = {
+    CAN_CONTROL: "mower.control",
+    CAN_DRIVE: "mower.drive",
+    CAN_MANAGE_MOWERS: "fleet.manage",
+    CAN_EDIT_SCHEDULE: "schedule.edit",
+}
