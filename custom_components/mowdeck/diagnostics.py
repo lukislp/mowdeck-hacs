@@ -37,6 +37,7 @@ TO_REDACT = {
     "area_names",
     "title",
     "body",
+    "owner",
 }
 
 
@@ -74,5 +75,14 @@ async def async_get_config_entry_diagnostics(
             "last_update_success": runtime.health.last_update_success,
             "forbidden": runtime.health.forbidden,
             "totals": async_redact_data(runtime.health.data.totals, TO_REDACT),
+        },
+        "scheduler": {
+            "last_update_success": runtime.scheduler.last_update_success,
+            "forbidden": runtime.scheduler.forbidden,
+            "available": runtime.scheduler.data.available,
+            "schedules": async_redact_data(runtime.scheduler.data.schedules, TO_REDACT),
+            "runs": async_redact_data(runtime.scheduler.data.runs, TO_REDACT),
+            "weather": async_redact_data(runtime.scheduler.data.weather, TO_REDACT),
+            "permissions": {k: sorted(v) for k, v in runtime.scheduler.data.permissions.items()},
         },
     }

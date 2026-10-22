@@ -73,6 +73,40 @@
       },
       "error": {
         "name": "Error"
+      },
+      "rain_hold": {
+        "name": "Rain hold",
+        "state_attributes": {
+          "verdict": {
+            "name": "Verdict",
+            "state": {
+              "run": "Run",
+              "hold": "Hold",
+              "unknown_run": "No forecast, run",
+              "unknown_hold": "No forecast, hold",
+              "no_location": "No location",
+              "disabled": "Rain pause off"
+            }
+          },
+          "reason": {
+            "name": "Reason"
+          },
+          "wet": {
+            "name": "Lawn wet"
+          },
+          "recent_mm_6h": {
+            "name": "Rain in the last 6 hours"
+          },
+          "recent_mm_24h": {
+            "name": "Rain in the last 24 hours"
+          },
+          "provider": {
+            "name": "Weather provider"
+          },
+          "attribution": {
+            "name": "Attribution"
+          }
+        }
       }
     },
     "button": {
@@ -90,6 +124,12 @@
       },
       "blade_changed": {
         "name": "Blade changed"
+      },
+      "schedule_run_now": {
+        "name": "Run {schedule} now"
+      },
+      "schedule_skip_next": {
+        "name": "Skip next run of {schedule}"
       }
     },
     "camera": {
@@ -251,11 +291,35 @@
             "name": "MowDeck count"
           }
         }
+      },
+      "next_mow": {
+        "name": "Next mowing"
+      },
+      "last_schedule_run": {
+        "name": "Last schedule run",
+        "state": {
+          "started": "Started",
+          "skipped_rain": "Skipped for rain",
+          "skipped_permission": "Skipped, no permission",
+          "skipped_window": "Skipped, window closed",
+          "skipped_mower_busy": "Skipped, mower busy",
+          "skipped_manual": "Skipped by hand",
+          "failed": "Failed"
+        }
+      },
+      "rain_pause_until": {
+        "name": "Rain pause until"
+      },
+      "lawn_wet_until": {
+        "name": "Lawn wet until"
       }
     },
     "switch": {
       "light": {
         "name": "Camera light"
+      },
+      "schedule": {
+        "name": "Schedule {schedule}"
       }
     },
     "update": {
@@ -319,6 +383,10 @@
     "health_forbidden": {
       "title": "MowDeck refuses the mower health data",
       "description": "MowDeck at {url} answers the health totals (blade hours, mowing hours, distance, battery cycles) with \"forbidden\" for this API token, so these sensors are unavailable. Grant the permission {permission} to the token in the MowDeck app. This message disappears with the next successful update."
+    },
+    "scheduler_forbidden": {
+      "title": "MowDeck refuses the schedules",
+      "description": "MowDeck at {url} answers the schedules or the rain decision with \"forbidden\" for this API token, so the schedule and rain entities are unavailable. Grant the permission {permission} (it follows mower.view) to the token in the MowDeck app. This message disappears with the next successful update."
     }
   },
   "services": {

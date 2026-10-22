@@ -20,6 +20,7 @@ from .const import CONF_API_TOKEN, DOMAIN
 from .coordinator import MowDeckCoordinator
 from .health import HealthCoordinator
 from .realtime import RealtimeClient
+from .scheduler import SchedulerCoordinator
 from .services import async_setup_services
 
 PLATFORMS: list[Platform] = [
@@ -46,6 +47,7 @@ class MowDeckRuntimeData:
     coordinator: MowDeckCoordinator
     realtime: RealtimeClient
     health: HealthCoordinator
+    scheduler: SchedulerCoordinator
 
 
 type MowDeckConfigEntry = ConfigEntry[MowDeckRuntimeData]
@@ -74,9 +76,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> b
         hass, client, coordinator, entry_id=entry.entry_id, on_auth_failed=_auth_failed
     )
     health = HealthCoordinator(hass, entry, coordinator)
+    scheduler = SchedulerCoordinator(hass, entry, coordinator)
     # The further services never block the setup; their entities wait for them.
     await health.async_refresh()
-    entry.runtime_data = MowDeckRuntimeData(client, coordinator, realtime, health)
+    await scheduler.async_refresh()
+    entry.runtime_data = MowDeckRuntimeData(client, coordinator, realtime, health, scheduler)
     entry.async_on_unload(
         coordinator.async_add_listener(_device_updater(hass, entry.entry_id, coordinator))
     )

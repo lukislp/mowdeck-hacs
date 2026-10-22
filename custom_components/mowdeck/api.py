@@ -13,7 +13,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import aiohttp
 
@@ -22,6 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 IDENTITY = "/api/v1/identity"
 FLEET = "/api/v1/fleet"
 TELEMETRY = "/api/v1/telemetry"
+SCHEDULER = "/api/v1/scheduler"
 REALTIME_WS = "/api/v1/realtime/ws"
 
 # Questions per ``POST /identity/me/permissions`` (the API accepts up to 100).
@@ -473,6 +474,58 @@ class MowDeckClient:
                 "POST", f"{TELEMETRY}/mowers/{mower_id}/health/blade-reset", json=body
             )
         )
+
+    # Scheduler
+
+    async def list_schedules(self) -> list[dict[str, Any]]:
+        """``GET /scheduler/schedules``: the schedules whose mower or group the token sees."""
+        body = await self._request("GET", f"{SCHEDULER}/schedules")
+        return [dict(item) for item in body.get("items", [])]
+
+    async def update_schedule(self, schedule_id: str, changes: Mapping[str, Any]) -> dict[str, Any]:
+        """``PATCH /scheduler/schedules/{id}`` (``can_edit_schedule`` and ``can_control``).
+
+        MowDeck makes the caller the schedule's owner, so later firings run as this token."""
+        return dict(
+            await self._request("PATCH", f"{SCHEDULER}/schedules/{schedule_id}", json=dict(changes))
+        )
+
+    async def run_schedule_now(
+        self, schedule_id: str, *, respect_rain: bool = False
+    ) -> list[dict[str, Any]]:
+        """``POST /scheduler/schedules/{id}/run-now``: start it now (``can_control``); the runs."""
+        query = urlencode({"respect_rain": str(respect_rain).lower()})
+        body = await self._request("POST", f"{SCHEDULER}/schedules/{schedule_id}/run-now?{query}")
+        return [dict(item) for item in body.get("items", [])]
+
+    async def skip_next_run(self, schedule_id: str) -> dict[str, Any]:
+        """``POST /scheduler/schedules/{id}/skip-next``; 409 without a next run."""
+        return dict(await self._request("POST", f"{SCHEDULER}/schedules/{schedule_id}/skip-next"))
+
+    async def list_schedule_runs(
+        self, schedule_id: str, *, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """``GET /scheduler/schedules/{id}/runs``: the newest run records first."""
+        query = urlencode({"limit": limit})
+        body = await self._request("GET", f"{SCHEDULER}/schedules/{schedule_id}/runs?{query}")
+        return [dict(item) for item in body.get("items", [])]
+
+    async def preview_schedule(self, schedule_id: str, *, count: int = 3) -> list[dict[str, Any]]:
+        """``GET /scheduler/schedules/{id}/preview``: the next firings (``skipped`` marked)."""
+        query = urlencode({"count": count})
+        body = await self._request("GET", f"{SCHEDULER}/schedules/{schedule_id}/preview?{query}")
+        return [dict(item) for item in body.get("items", [])]
+
+    async def get_weather(
+        self, mower_id: str, settings: Mapping[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """``GET /scheduler/weather/{mower_id}``: the rain decision for the mower now, with the
+        rain pause ``settings`` of a schedule (thresholds, lookahead, cooldown) when given."""
+        keys: tuple[str, ...] = ("probability_threshold", "precipitation_mm_threshold")
+        keys += ("lookahead_hours", "cooldown_hours")
+        params = {k: settings[k] for k in keys if settings and settings.get(k) is not None}
+        query = f"?{urlencode(params)}" if params else ""
+        return dict(await self._request("GET", f"{SCHEDULER}/weather/{mower_id}{query}"))
 
 
 class _RetryableStatusError(Exception):

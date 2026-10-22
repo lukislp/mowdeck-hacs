@@ -11,14 +11,20 @@
       "blade_hours": { "default": "mdi:saw-blade" },
       "mowing_hours": { "default": "mdi:timer-outline" },
       "mowing_distance": { "default": "mdi:map-marker-distance" },
-      "battery_cycles": { "default": "mdi:battery-sync-outline" }
+      "battery_cycles": { "default": "mdi:battery-sync-outline" },
+      "next_mow": { "default": "mdi:calendar-clock" },
+      "last_schedule_run": { "default": "mdi:calendar-check" },
+      "rain_pause_until": { "default": "mdi:weather-rainy" },
+      "lawn_wet_until": { "default": "mdi:water-outline" }
     },
     "button": {
       "emergency_stop": { "default": "mdi:alert-octagon" },
       "return_to_dock": { "default": "mdi:home-import-outline" },
       "end_job": { "default": "mdi:stop-circle-outline" },
       "firmware_check": { "default": "mdi:cloud-search-outline" },
-      "blade_changed": { "default": "mdi:saw-blade" }
+      "blade_changed": { "default": "mdi:saw-blade" },
+      "schedule_run_now": { "default": "mdi:play-circle-outline" },
+      "schedule_skip_next": { "default": "mdi:skip-next-circle-outline" }
     },
     "number": {
       "blade_height": { "default": "mdi:arrow-expand-vertical" },
@@ -29,10 +35,14 @@
       "area": { "default": "mdi:texture-box" }
     },
     "switch": {
-      "light": { "default": "mdi:lightbulb-outline", "state": { "on": "mdi:lightbulb-on" } }
+      "light": { "default": "mdi:lightbulb-outline", "state": { "on": "mdi:lightbulb-on" } },
+      "schedule": { "default": "mdi:calendar-blank", "state": { "on": "mdi:calendar-check" } }
     },
     "device_tracker": {
       "position": { "default": "mdi:map-marker" }
+    },
+    "binary_sensor": {
+      "rain_hold": { "default": "mdi:weather-pouring", "state": { "off": "mdi:weather-partly-cloudy" } }
     }
   },
   "services": {

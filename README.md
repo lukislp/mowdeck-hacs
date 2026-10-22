@@ -29,6 +29,7 @@ In the MowDeck web app: **Settings, API tokens, New token**. Give it a name ("Ho
 | `mower.control` | start, pause, dock, end job, blade height, mowing speed, light (without it Home Assistant is read only; the emergency stop works for viewers too) |
 | `mower.drive` | optional: the manual drive speed setting (the number is disabled by default) |
 | `fleet.manage` | optional: installing a firmware update from the update entity, **Blade changed** |
+| `schedule.edit` | optional: the schedule switches and **Skip next run** buttons (together with `mower.control`, which **Run now** needs alone). Seeing schedules, the next mowing, the last run and the rain decision only needs `mower.view` (`scheduler.view` follows it) |
 
 The integration asks MowDeck which of these the token holds on each mower (`POST /api/v1/identity/me/permissions`, every 10 minutes) and only creates entities whose action the token may run; a MowDeck that cannot answer that question hides nothing, and a refused action names the missing permission.
 
@@ -57,6 +58,7 @@ The flow exchanges the token, reads `/api/v1/identity/me` and lists the mowers; 
 | Mower list | polled | every 5 minutes while the socket is up (finds new and removed mowers) |
 | Capabilities, map, token permissions | polled | every 10 minutes |
 | Health totals (blade hours, mowing hours, distance, battery cycles) | polled, own coordinator | every 15 minutes |
+| Schedules, their runs, the rain decision | polled, own coordinator | every 5 minutes and right after a schedule action |
 
 Each MowDeck service has its own coordinator: when one fails, only its entities turn unavailable. When one answers "forbidden" (403), a Repairs issue names the permission the token lacks; it disappears with the next successful update.
 
@@ -83,6 +85,12 @@ Per mower one device (manufacturer Mammotion, model from the capabilities, firmw
 | Blade height, Mowing speed | `number.luba_blade_height`, `number.luba_mowing_speed` | ranges from the mower's capabilities (`blade_height_range_mm`, `min_speed_mps` / `max_speed_mps`); the speed in steps of 0.01 m/s, shown and sent with two decimals |
 | Manual drive speed | `number.luba_manual_drive_speed` | the vendor's speed setting for joystick driving (`drive_speed_setting`, `set_drive_speed`); disabled by default, needs `mower.drive`; only for mowers that have the setting |
 | Firmware | `update.luba_firmware` | installed and offered firmware with release notes and progress (`firmware_info`); install sends `firmware_update` (MowDeck requires the mower docked with enough battery; needs `fleet.manage`); only for mowers whose connection can update firmware |
+| Schedule *name* | `switch.luba_schedule_morning` | one per MowDeck schedule of the mower or of one of its groups: on = enabled (`PATCH /scheduler/schedules/{id}`). Attributes: days, start time, window, areas, next run, why MowDeck disabled it. Needs `schedule.edit` and `mower.control`. **MowDeck makes whoever changes a schedule its owner**, so after a toggle in Home Assistant the schedule fires on behalf of the API token (and stops when the token is revoked) |
+| Run *name* now, Skip next run of *name* | `button.luba_run_morning_now`, `button.luba_skip_next_run_of_morning` | start the schedule now without its rain pause (`mower.control`); skip its next firing (`schedule.edit`) |
+| Next mowing | `sensor.luba_next_mowing` | the earliest next firing of the mower's enabled schedules (a skipped firing is passed over), attribute `schedule` |
+| Last schedule run | `sensor.luba_last_schedule_run` | outcome of the newest run of the mower: `started`, `skipped_rain`, `skipped_permission`, `skipped_window`, `skipped_mower_busy`, `skipped_manual`, `failed`; attributes `schedule`, `scheduled_for`, `trigger`, `details` |
+| Rain hold | `binary_sensor.luba_rain_hold` | on while MowDeck's rain pause holds the mower's runs (`GET /scheduler/weather/{id}` with the rain settings of the mower's next schedule, MowDeck's defaults without one); attributes `verdict`, `reason`, `wet`, recent rain, provider |
+| Rain pause until, Lawn wet until | `sensor.luba_rain_pause_until`, `sensor.luba_lawn_wet_until` | when the hold ends and when the lawn is estimated dry (unknown when not holding or not wet) |
 | Area | `select.luba_area` | `all` or one map area, named as in MowDeck (the name given in MowDeck, else the mower's own name, else "Area N" / "Bereich N" in map order); used by "start mowing" |
 | Position | `device_tracker.luba_position` | GPS (`position` of the state), attributes `heading` (degrees, one decimal) and `position_source` (`rtk`, `gnss` or `dock`) |
 | Camera | `camera.luba_camera` | the live camera over MowDeck's camera relay as WebRTC (see [Cameras](#cameras)); only for mowers whose capabilities name a camera (`camera` `cloud` or `local`) |
@@ -149,6 +157,8 @@ data:
 - **Camera stays black or "connecting"**: the browser does not reach the relay's media port. Check from the same device that `RELAY_ICE_HOSTS` contains an address it can reach and that port 8189 (UDP and TCP) is open on the MowDeck host; the MowDeck web app on that device shows the same problem then.
 - **"The mower's camera did not start in time"**: the mower did not publish within 40 s (4G gaps, a sleeping mower that wakes slowly). Open the camera again.
 - **"MowDeck refuses the mower health data" (Repairs)**: the health totals answer 403 for the token. Grant the named permission; the issue disappears with the next update (every 15 minutes).
+- **"MowDeck refuses the schedules" (Repairs)**: the Scheduler answers 403; grant `mower.view` (or `scheduler.view`) to the token. A MowDeck without the Scheduler simply shows no schedule or rain entities.
+- **No schedule switch or skip button**: the token lacks `schedule.edit` (or `mower.control`) on the schedule's mower or group; MowDeck is asked every 5 minutes, so new grants show up without a restart.
 - **Diagnostics** (three dots on the entry) contain mowers, states, capabilities, the token's permissions per mower, the health totals and the realtime status; the API token, connection options, serials, vendor ids, positions and all coordinates are redacted, and maps are reduced to counts (no area names or boundaries).
 
 ## Removal

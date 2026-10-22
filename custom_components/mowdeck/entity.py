@@ -19,6 +19,7 @@ from .coordinator import MowDeckCoordinator
 
 if TYPE_CHECKING:
     from . import MowDeckConfigEntry
+    from .scheduler import SchedulerCoordinator
 
 
 def mower_device_info(coordinator: MowDeckCoordinator, mower_id: str) -> DeviceInfo:
@@ -178,3 +179,53 @@ def _async_remove_entities(entry: MowDeckConfigEntry, domain: str, unique_ids: s
         entity_id = registry.async_get_entity_id(domain, DOMAIN, unique_id)
         if entity_id is not None:
             registry.async_remove(entity_id)
+
+
+class ScheduleEntity(MowDeckEntity):
+    """An entity of one schedule shown on one of the mowers it mows.
+
+    A group schedule appears on every mower of the group. The name carries the schedule's
+    current name; the entity is unavailable while the schedule is gone."""
+
+    def __init__(
+        self,
+        coordinator: MowDeckCoordinator,
+        mower_id: str,
+        scheduler: SchedulerCoordinator,
+        schedule_id: str,
+        key: str,
+    ) -> None:
+        """Bind the entity to a schedule; the unique id is ``<mower>_<key>_<schedule>``."""
+        super().__init__(coordinator, mower_id, key, service=scheduler)
+        self.scheduler = scheduler
+        self.schedule_id = schedule_id
+        self._attr_unique_id = f"{mower_id}_{key}_{schedule_id}"
+        self._attr_translation_placeholders = self._placeholders()
+
+    @property
+    def schedule(self) -> dict[str, Any]:
+        """The schedule as the Scheduler last answered it (empty once deleted)."""
+        return self.scheduler.data.schedules.get(self.schedule_id) or {}
+
+    def _placeholders(self) -> dict[str, str]:
+        return {"schedule": str(self.schedule.get("name") or self.schedule_id)}
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Follow a renamed schedule."""
+        self._attr_translation_placeholders = self._placeholders()
+        super()._handle_coordinator_update()
+
+    @property
+    def available(self) -> bool:
+        """Available while the schedule exists."""
+        return super().available and bool(self.schedule)
+
+    async def async_schedule_action[T](
+        self, request: Awaitable[T], action: str, permission: str
+    ) -> T:
+        """Run a Scheduler request, then refresh the schedules at once."""
+        try:
+            return await self.async_call_api(request, action, permission)
+        finally:
+            await self.scheduler.async_refresh()

@@ -70,6 +70,100 @@ def mower_state(**overrides: Any) -> dict[str, Any]:
     return state
 
 
+SCHEDULE_ID = "5e1d7c3a-2b4f-4e8a-9d6c-7f0a1b2c3d4e"
+
+
+def in_hours(hours: float) -> str:
+    """A UTC timestamp ``hours`` from now in the API's format."""
+    return (datetime.now(UTC) + timedelta(hours=hours)).isoformat().replace("+00:00", "Z")
+
+
+def schedule(**overrides: Any) -> dict[str, Any]:
+    """A ScheduleOut for the test mower: weekly, enabled, next run in 20 hours."""
+    item: dict[str, Any] = {
+        "id": SCHEDULE_ID,
+        "name": "Morning",
+        "kind": "weekly",
+        "days_of_week": ["mon", "wed", "fri"],
+        "interval_days": None,
+        "anchor_date": None,
+        "start_time": "09:00:00",
+        "duration_minutes": 120,
+        "timezone": "Europe/Berlin",
+        "timezone_override": None,
+        "target_type": "mower",
+        "target_id": MOWER_ID,
+        "area_ids": [],
+        "pattern": None,
+        "rotation_angles": [],
+        "rotation_index": 0,
+        "enabled": True,
+        "disabled_reason": None,
+        "pause_running_jobs_on_rain": True,
+        "return_to_dock_at_window_end": False,
+        "rain_pause": {
+            "enabled": True,
+            "probability_threshold": 70,
+            "precipitation_mm_threshold": 0.5,
+            "lookahead_hours": 3,
+            "cooldown_hours": 2,
+            "run_when_unknown": True,
+        },
+        "permission_skips": 0,
+        "skip_until": None,
+        "next_run_at": in_hours(20),
+        "last_run_at": in_hours(-20),
+        "owner": {"kind": "user", "subject": str(uuid.uuid4()), "display_name": "Anna"},
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    item.update(overrides)
+    return item
+
+
+def schedule_run(
+    *, outcome: str, hours_ago: float, trigger: str = "schedule", mower_id: str | None = MOWER_ID
+) -> dict[str, Any]:
+    """A RunOut of the test schedule."""
+    return {
+        "id": str(uuid.uuid4()),
+        "schedule_id": SCHEDULE_ID,
+        "mower_id": mower_id,
+        "trigger": trigger,
+        "outcome": outcome,
+        "scheduled_for": in_hours(-hours_ago),
+        "started_at": in_hours(-hours_ago),
+        "window_end_at": in_hours(2 - hours_ago),
+        "command_id": None,
+        "details": "rain expected" if outcome == "skipped_rain" else None,
+        "followup": None,
+        "followup_at": None,
+    }
+
+
+def rain_decision(**overrides: Any) -> dict[str, Any]:
+    """A RainDecisionOut that holds: rain in the forecast, the lawn wet for three hours."""
+    decision: dict[str, Any] = {
+        "verdict": "hold",
+        "holds": True,
+        "reason": "rain expected within 3 h",
+        "provider": "open-meteo",
+        "attribution": "Weather data by Open-Meteo.com",
+        "latitude": 48.137,
+        "longitude": 11.575,
+        "location_source": "site",
+        "hours": [],
+        "recent_mm_6h": 1.2,
+        "recent_mm_24h": 4.5,
+        "settings": {},
+        "pause_until": in_hours(2),
+        "wet": True,
+        "wet_until": in_hours(3),
+    }
+    decision.update(overrides)
+    return decision
+
+
 @dataclass
 class FakeMowDeck:
     """State and behaviour of the fake API; tests change the fields to steer it."""
@@ -106,6 +200,12 @@ class FakeMowDeck:
     token_overrides: dict[str, Any] = field(default_factory=dict)
     permission_answer: Any = None
     ws_error_before_ready: bool = False
+    # Scheduler (None: this MowDeck runs no Scheduler, every path answers a plain 404).
+    schedules: dict[str, dict[str, Any]] | None = field(default_factory=dict)
+    schedule_runs: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    schedule_patches: list[dict[str, Any]] = field(default_factory=list)
+    weather: dict[str, dict[str, Any]] = field(default_factory=dict)
+    weather_queries: list[dict[str, str]] = field(default_factory=list)
     firmware_check_status: int | None = None
     blade_resets: list[dict[str, Any]] = field(default_factory=list)
     fail_requests: int = 0
@@ -188,6 +288,12 @@ class FakeMowDeck:
             "errors": {},
             "updated_at": now_iso(),
         }
+        self.schedules = {SCHEDULE_ID: schedule()}
+        self.schedule_runs[SCHEDULE_ID] = [
+            schedule_run(outcome="skipped_rain", hours_ago=20),
+            schedule_run(outcome="started", hours_ago=44),
+        ]
+        self.weather[MOWER_ID] = rain_decision()
         square = [[0, 0], [10, 0], [10, 10]]
         self.maps[MOWER_ID] = {
             "reference": {"origin_lat": 48.137, "origin_lon": 11.575},
@@ -234,6 +340,14 @@ class FakeMowDeck:
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/map", self._map)
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/health", self._health)
         app.router.add_get("/api/v1/realtime/ws", self._ws)
+        sched = "/api/v1/scheduler/schedules"
+        app.router.add_get(sched, self._schedules)
+        app.router.add_patch(sched + "/{schedule_id}", self._patch_schedule)
+        app.router.add_post(sched + "/{schedule_id}/run-now", self._run_now)
+        app.router.add_post(sched + "/{schedule_id}/skip-next", self._skip_next)
+        app.router.add_get(sched + "/{schedule_id}/runs", self._runs)
+        app.router.add_get(sched + "/{schedule_id}/preview", self._preview)
+        app.router.add_get("/api/v1/scheduler/weather/{mower_id}", self._weather)
         camera = "/api/v1/fleet/mowers/{mower_id}/camera/session"
         app.router.add_post(camera, self._camera_open)
         app.router.add_post(camera + "/{lease_id}/renew", self._camera_renew)
@@ -320,6 +434,7 @@ class FakeMowDeck:
         if self.permission_answer is not None:
             return web.json_response(self.permission_answer)
         visible = {f"mower:{m['id']}" for m in self._visible(request)}
+        visible |= {f"group:{g}" for m in self._visible(request) for g in m["group_ids"]}
         return web.json_response(
             [
                 check["object"] in visible and check["relation"] in self.relations
@@ -363,6 +478,87 @@ class FakeMowDeck:
             }
         )
         return web.json_response(health)
+
+    # Scheduler
+
+    def _schedule(self, request: web.Request) -> dict[str, Any] | web.Response:
+        if self.schedules is None:
+            return web.Response(status=404, text="404 page not found")
+        found = self.schedules.get(request.match_info["schedule_id"])
+        if found is None:
+            return problem(404, "Not found", "schedule not found")
+        return found
+
+    async def _schedules(self, request: web.Request) -> web.Response:
+        if self.schedules is None:
+            return web.Response(status=404, text="404 page not found")
+        return web.json_response({"items": list(self.schedules.values())})
+
+    async def _patch_schedule(self, request: web.Request) -> web.Response:
+        found = self._schedule(request)
+        if isinstance(found, web.Response):
+            return found
+        if self.relations is not None and "can_edit_schedule" not in self.relations:
+            return problem(403, "Forbidden", "missing can_edit_schedule on the mower")
+        changes = await request.json()
+        self.schedule_patches.append({"id": found["id"], **changes})
+        found.update(changes)
+        if changes.get("enabled") is False:
+            found["next_run_at"] = None
+        elif changes.get("enabled") is True:
+            found["next_run_at"] = in_hours(20)
+        return web.json_response(found)
+
+    async def _run_now(self, request: web.Request) -> web.Response:
+        found = self._schedule(request)
+        if isinstance(found, web.Response):
+            return found
+        assert request.query.get("respect_rain") == "false"
+        run = schedule_run(outcome="started", hours_ago=0, trigger="manual")
+        self.schedule_runs.setdefault(found["id"], []).insert(0, run)
+        return web.json_response({"items": [run]}, status=202)
+
+    async def _skip_next(self, request: web.Request) -> web.Response:
+        found = self._schedule(request)
+        if isinstance(found, web.Response):
+            return found
+        if not found["enabled"] or found["next_run_at"] is None:
+            return problem(409, "Conflict", "the schedule has no next run")
+        found["skip_until"] = found["next_run_at"]
+        return web.json_response(found)
+
+    async def _runs(self, request: web.Request) -> web.Response:
+        found = self._schedule(request)
+        if isinstance(found, web.Response):
+            return found
+        limit = int(request.query.get("limit", "50"))
+        return web.json_response({"items": self.schedule_runs.get(found["id"], [])[:limit]})
+
+    async def _preview(self, request: web.Request) -> web.Response:
+        found = self._schedule(request)
+        if isinstance(found, web.Response):
+            return found
+        first = datetime.fromisoformat(found["next_run_at"].replace("Z", "+00:00"))
+        items = [
+            {
+                "at": (first + timedelta(days=i)).isoformat(),
+                "window_end": (first + timedelta(days=i, hours=2)).isoformat(),
+                "skipped": i == 0 and found.get("skip_until") is not None,
+            }
+            for i in range(int(request.query.get("count", "5")))
+        ]
+        return web.json_response({"items": items, "weather": None, "weather_mower_id": None})
+
+    async def _weather(self, request: web.Request) -> web.Response:
+        if self.schedules is None:
+            return web.Response(status=404, text="404 page not found")
+        mower_id = request.match_info["mower_id"]
+        if mower_id not in self.weather:
+            return problem(404, "Not found", "mower not found")
+        self.weather_queries.append(dict(request.query))
+        return web.json_response(
+            {"mower_id": mower_id, "at": now_iso(), "decision": self.weather[mower_id]}
+        )
 
     def _visible(self, request: web.Request) -> list[dict[str, Any]]:
         return self.mowers if self._account(request) == ACCOUNT_ID else []
