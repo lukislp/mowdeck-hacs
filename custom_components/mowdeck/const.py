@@ -11,11 +11,15 @@ MANUFACTURER: Final = "Mammotion"
 CONF_API_TOKEN: Final = "api_token"  # noqa: S105 - a config key, not a secret
 CONF_POLL_INTERVAL: Final = "poll_interval"
 CONF_EXPOSE_EMERGENCY_STOP: Final = "expose_emergency_stop"
+CONF_PERSISTENT_SEVERITY: Final = "persistent_notifications"
 
 DEFAULT_POLL_INTERVAL: Final = 60
 MIN_POLL_INTERVAL: Final = 15
 MAX_POLL_INTERVAL: Final = 3600
 DEFAULT_EXPOSE_EMERGENCY_STOP: Final = True
+# Mirror MowDeck notifications as persistent notifications from this severity on.
+PERSISTENT_OFF: Final = "off"
+DEFAULT_PERSISTENT_SEVERITY: Final = PERSISTENT_OFF
 
 # While the WebSocket delivers states, polling only discovers new mowers and refreshes
 # capabilities and maps.
@@ -26,6 +30,10 @@ STATIC_REFRESH: Final = timedelta(minutes=10)
 HEALTH_REFRESH: Final = timedelta(minutes=15)
 # Schedules, their runs and the rain decision; also refreshed right after schedule actions.
 SCHEDULER_REFRESH: Final = timedelta(minutes=5)
+# The inbox, polled while MowDeck pushes no notifications over the live connection; asked
+# again this rarely when MowDeck gives the token no inbox.
+INBOX_REFRESH: Final = timedelta(seconds=60)
+INBOX_RECHECK: Final = timedelta(hours=6)
 # A state older than this counts as offline (Telemetry's own stale flag also counts).
 STALE_AFTER: Final = timedelta(minutes=5)
 
@@ -37,6 +45,31 @@ ALL_AREAS: Final = "all"
 AREA_FALLBACK: Final = {"en": "Area {n}", "de": "Bereich {n}"}
 
 EVENT_COMMAND_RESULT: Final = "mowdeck_command_result"
+EVENT_NOTIFICATION: Final = "mowdeck_notification"
+
+# NotificationSeverity (apps/web/openapi/notifications.json), lowest first.
+SEVERITIES: Final = ["info", "warning", "critical"]
+# NotificationKind: the event types of the notification event entity.
+NOTIFICATION_KINDS: Final = [
+    "mowing_finished",
+    "mower_stuck",
+    "battery_low",
+    "mower_offline",
+    "mower_online",
+    "job_started",
+    "mower_lifted",
+    "mower_left_dock_unexpectedly",
+    "geofence_exit",
+    "blade_maintenance",
+    "vision_proposal",
+    "vision_auto_proposal",
+    "firmware_update_available",
+    "firmware_update_finished",
+    "firmware_update_failed",
+    "test",
+]
+# CommandState (apps/web/openapi/fleet.json): the event types of the command event entity.
+COMMAND_STATES: Final = ["pending", "accepted", "rejected", "executed", "expired", "failed"]
 
 ISSUE_REALTIME_UNAUTHORIZED: Final = "realtime_unauthorized"
 # Repairs issue of a polled MowDeck service that answers 403 ("<service>_forbidden").

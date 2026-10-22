@@ -70,6 +70,27 @@ def mower_state(**overrides: Any) -> dict[str, Any]:
     return state
 
 
+def notification(**overrides: Any) -> dict[str, Any]:
+    """An unread InboxItemOut of the test mower."""
+    item: dict[str, Any] = {
+        "id": str(uuid.uuid4()),
+        "kind": "mower_stuck",
+        "severity": "critical",
+        "title": "Luba is stuck",
+        "body": "The robot is stuck near the hedge.",
+        "url": f"/mowers/{MOWER_ID}",
+        "mower_id": MOWER_ID,
+        "read": False,
+        "read_at": None,
+        "acked": False,
+        "acked_at": None,
+        "occurred_at": now_iso(),
+        "created_at": now_iso(),
+    }
+    item.update(overrides)
+    return item
+
+
 SCHEDULE_ID = "5e1d7c3a-2b4f-4e8a-9d6c-7f0a1b2c3d4e"
 
 
@@ -206,6 +227,9 @@ class FakeMowDeck:
     schedule_patches: list[dict[str, Any]] = field(default_factory=list)
     weather: dict[str, dict[str, Any]] = field(default_factory=dict)
     weather_queries: list[dict[str, str]] = field(default_factory=list)
+    # Notifications: MowDeck answers 403 to API tokens (inbox_allowed False), like today.
+    inbox_allowed: bool = False
+    inbox: list[dict[str, Any]] = field(default_factory=list)
     firmware_check_status: int | None = None
     blade_resets: list[dict[str, Any]] = field(default_factory=list)
     fail_requests: int = 0
@@ -348,6 +372,7 @@ class FakeMowDeck:
         app.router.add_get(sched + "/{schedule_id}/runs", self._runs)
         app.router.add_get(sched + "/{schedule_id}/preview", self._preview)
         app.router.add_get("/api/v1/scheduler/weather/{mower_id}", self._weather)
+        app.router.add_get("/api/v1/notifications/inbox", self._inbox)
         camera = "/api/v1/fleet/mowers/{mower_id}/camera/session"
         app.router.add_post(camera, self._camera_open)
         app.router.add_post(camera + "/{lease_id}/renew", self._camera_renew)
@@ -559,6 +584,13 @@ class FakeMowDeck:
         return web.json_response(
             {"mower_id": mower_id, "at": now_iso(), "decision": self.weather[mower_id]}
         )
+
+    async def _inbox(self, request: web.Request) -> web.Response:
+        if not self.inbox_allowed:
+            return problem(403, "Forbidden", "notifications belong to users of an account")
+        assert request.query.get("unread") == "true"
+        items = [i for i in self.inbox if not i["read"]][: int(request.query.get("limit", "50"))]
+        return web.json_response({"items": items, "unread": len(items)})
 
     def _visible(self, request: web.Request) -> list[dict[str, Any]]:
         return self.mowers if self._account(request) == ACCOUNT_ID else []

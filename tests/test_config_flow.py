@@ -11,6 +11,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.mowdeck.const import (
     CONF_API_TOKEN,
     CONF_EXPOSE_EMERGENCY_STOP,
+    CONF_PERSISTENT_SEVERITY,
     CONF_POLL_INTERVAL,
     DOMAIN,
 )
@@ -146,7 +147,11 @@ async def test_options_flow(
     )
     await hass.async_block_till_done()
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert loaded_entry.options == {CONF_POLL_INTERVAL: 120, CONF_EXPOSE_EMERGENCY_STOP: False}
+    assert loaded_entry.options == {
+        CONF_POLL_INTERVAL: 120,
+        CONF_EXPOSE_EMERGENCY_STOP: False,
+        CONF_PERSISTENT_SEVERITY: "off",
+    }
     coordinator = loaded_entry.runtime_data.coordinator
     assert coordinator.poll_interval.total_seconds() == 120
     state = hass.states.get("button.luba_emergency_stop")

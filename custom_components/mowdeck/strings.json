@@ -54,11 +54,13 @@
         "title": "MowDeck options",
         "data": {
           "poll_interval": "Poll interval",
-          "expose_emergency_stop": "Show the emergency stop button"
+          "expose_emergency_stop": "Show the emergency stop button",
+          "persistent_notifications": "Persistent notifications"
         },
         "data_description": {
           "poll_interval": "Seconds between API polls while the live connection is down.",
-          "expose_emergency_stop": "Adds an emergency stop button per mower. The action mowdeck.emergency_stop is always available."
+          "expose_emergency_stop": "Adds an emergency stop button per mower. The action mowdeck.emergency_stop is always available.",
+          "persistent_notifications": "Also show MowDeck notifications of this severity or higher as persistent notifications in Home Assistant. The event entities and the mowdeck_notification event get every notification regardless."
         }
       }
     }
@@ -326,6 +328,48 @@
       "firmware": {
         "name": "Firmware"
       }
+    },
+    "event": {
+      "command": {
+        "name": "Command",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "pending": "Pending",
+              "accepted": "Accepted",
+              "rejected": "Rejected",
+              "executed": "Executed",
+              "expired": "Expired",
+              "failed": "Failed"
+            }
+          }
+        }
+      },
+      "notification": {
+        "name": "Notification",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "mowing_finished": "Mowing finished",
+              "mower_stuck": "Mower stuck",
+              "battery_low": "Battery low",
+              "mower_offline": "Mower offline",
+              "mower_online": "Mower back online",
+              "job_started": "Job started",
+              "mower_lifted": "Mower lifted",
+              "mower_left_dock_unexpectedly": "Left the dock unexpectedly",
+              "geofence_exit": "Left the garden",
+              "blade_maintenance": "Blade maintenance",
+              "vision_proposal": "Vision proposal",
+              "vision_auto_proposal": "Automatic vision proposal",
+              "firmware_update_available": "Firmware update available",
+              "firmware_update_finished": "Firmware update finished",
+              "firmware_update_failed": "Firmware update failed",
+              "test": "Test notification"
+            }
+          }
+        }
+      }
     }
   },
   "exceptions": {
@@ -426,6 +470,16 @@
           "name": "Speed",
           "description": "Speed in metres per second."
         }
+      }
+    }
+  },
+  "selector": {
+    "persistent_notifications": {
+      "options": {
+        "off": "Off",
+        "critical": "Critical only",
+        "warning": "Warnings and critical",
+        "info": "All"
       }
     }
   }

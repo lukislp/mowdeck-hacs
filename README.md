@@ -46,7 +46,7 @@ The secret (`mdk_...`) is shown once. Through the API: `POST /api/v1/identity/ac
 
 The flow exchanges the token, reads `/api/v1/identity/me` and lists the mowers; the entry is keyed by the MowDeck account id, so the same account cannot be added twice.
 
-**Options** (Configure on the entry): the poll interval while the live connection is down (default 60 s, 15 to 3600) and whether to show the emergency stop button (default on).
+**Options** (Configure on the entry): the poll interval while the live connection is down (default 60 s, 15 to 3600), whether to show the emergency stop button (default on), and **persistent notifications**: show MowDeck notifications of at least this severity also as persistent notifications in Home Assistant (off, critical only, warnings and critical, all; default off).
 
 **Reconfigure** (three dots on the entry): a new URL when MowDeck moved, optionally with a new API token. Leave the token empty to keep the current one; a token of another MowDeck account is refused.
 
@@ -59,6 +59,8 @@ The flow exchanges the token, reads `/api/v1/identity/me` and lists the mowers; 
 | Capabilities, map, token permissions | polled | every 10 minutes |
 | Health totals (blade hours, mowing hours, distance, battery cycles) | polled, own coordinator | every 15 minutes |
 | Schedules, their runs, the rain decision | polled, own coordinator | every 5 minutes and right after a schedule action |
+| Notifications | the inbox, polled, own coordinator (later pushed over the WebSocket) | every 60 s; every 6 hours while MowDeck gives the token no inbox (see [Notifications](#notifications)) |
+| Command results | pushed over the WebSocket | live |
 
 Each MowDeck service has its own coordinator: when one fails, only its entities turn unavailable. When one answers "forbidden" (403), a Repairs issue names the permission the token lacks; it disappears with the next successful update.
 
@@ -99,7 +101,20 @@ Per mower one device (manufacturer Mammotion, model from the capabilities, firmw
 
 **Start mowing** resumes a paused job; otherwise it starts the area chosen in the Area select, or every area of the map. A select holds one value, so several areas go through the action `mowdeck.start_mow`.
 
-The event `mowdeck_command_result` carries every command status change (`mower_id`, `command_id`, `status`, `reason`).
+The event `mowdeck_command_result` carries every command status change (`mower_id`, `command_id`, `status`, `reason`); the entity `event.luba_command` fires with the status as event type (`pending`, `accepted`, `rejected`, `executed`, `expired`, `failed`) and `command_id` and `reason` as attributes.
+
+## Notifications
+
+MowDeck notifications (mower stuck, battery low, mowing finished, theft alarms, firmware updates and so on) reach Home Assistant three ways:
+
+- the entity `event.luba_notification` per mower: the event type is the notification kind (`mowing_finished`, `mower_stuck`, `battery_low`, `mower_offline`, `mower_online`, `job_started`, `mower_lifted`, `mower_left_dock_unexpectedly`, `geofence_exit`, `blade_maintenance`, `vision_proposal`, `vision_auto_proposal`, `firmware_update_available`, `firmware_update_finished`, `firmware_update_failed`, `test`), the attributes are `notification_id`, `severity` (`info`, `warning`, `critical`), `title`, `body`, `url` and `occurred_at`;
+- the bus event `mowdeck_notification` with the same fields plus `mower_id`, `mower_name` and `config_entry_id` (also for notifications without a mower and for kinds this version does not know);
+- optionally a persistent notification (see the options).
+
+Both events have logbook entries. Every notification fires once: Home Assistant remembers the delivered ids, and the unread backlog found at the very first start is not replayed. Home Assistant never marks notifications read in MowDeck.
+
+**Limitation of the current MowDeck version:** MowDeck keeps inboxes for persons only and answers an API token's `GET /api/v1/notifications/inbox` with 403. The integration then treats the inbox as unavailable (no error, no Repairs issue), asks again every 6 hours, and creates the notification entity only once notifications arrive. As soon as MowDeck pushes notifications over the Realtime WebSocket (`notification` messages) or gives API tokens an inbox, they work without an update of this integration's configuration.
+
 
 ## Cameras
 

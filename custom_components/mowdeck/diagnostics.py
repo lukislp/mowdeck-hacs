@@ -85,4 +85,9 @@ async def async_get_config_entry_diagnostics(
             "weather": async_redact_data(runtime.scheduler.data.weather, TO_REDACT),
             "permissions": {k: sorted(v) for k, v in runtime.scheduler.data.permissions.items()},
         },
+        "notifications": {
+            "inbox": runtime.notifications.data.inbox,
+            "realtime": runtime.notifications.data.realtime,
+            "delivered": runtime.notifications.delivered_count,
+        },
     }
