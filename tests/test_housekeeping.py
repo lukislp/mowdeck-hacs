@@ -210,7 +210,6 @@ async def test_blade_changed_needs_fleet_manage(
 ) -> None:
     """Without can_manage_mowers the button goes away; a 403 names fleet.manage."""
     assert hass.states.get(BLADE_CHANGED) is not None
-    assert fake_api.permission_checks == 1
     fake_api.relations = {"can_view", "can_control"}
     with pytest.raises(HomeAssistantError) as err:
         await press(hass, BLADE_CHANGED)

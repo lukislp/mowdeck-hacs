@@ -1,5 +1,5 @@
 """Buttons of a MowDeck mower: emergency stop (optional), return to dock, end the job, check
-for firmware and record a blade change."""
+for firmware, record a blade change, and run or skip each schedule that mows it."""
 
 from __future__ import annotations
 
@@ -10,14 +10,21 @@ from homeassistant.components.button import ButtonEntity, ButtonEntityDescriptio
 from homeassistant.const import EntityCategory, Platform
 from homeassistant.core import HomeAssistant
 
-from .const import CAN_MANAGE_MOWERS, CONF_EXPOSE_EMERGENCY_STOP, DEFAULT_EXPOSE_EMERGENCY_STOP
-from .entity import MowDeckEntity, async_add_mower_entities
+from .const import (
+    CAN_CONTROL,
+    CAN_EDIT_SCHEDULE,
+    CAN_MANAGE_MOWERS,
+    CONF_EXPOSE_EMERGENCY_STOP,
+    DEFAULT_EXPOSE_EMERGENCY_STOP,
+)
+from .entity import MowDeckEntity, ScheduleEntity, async_add_mower_entities
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
     from . import MowDeckConfigEntry
     from .coordinator import MowDeckCoordinator
+    from .scheduler import SchedulerCoordinator
 
 PARALLEL_UPDATES = 0
 
@@ -58,6 +65,27 @@ async def async_setup_entry(
         return buttons
 
     async_add_mower_entities(entry, async_add_entities, entities, domain=Platform.BUTTON)
+
+    scheduler = entry.runtime_data.scheduler
+
+    def schedule_buttons(coordinator: MowDeckCoordinator, mower_id: str) -> list[ButtonEntity]:
+        buttons: list[ButtonEntity] = []
+        for schedule in scheduler.schedules_for(mower_id):
+            schedule_id = str(schedule["id"])
+            if scheduler.permitted(schedule, CAN_CONTROL):
+                buttons.append(ScheduleRunButton(coordinator, mower_id, scheduler, schedule_id))
+            if scheduler.permitted(schedule, CAN_EDIT_SCHEDULE):
+                buttons.append(ScheduleSkipButton(coordinator, mower_id, scheduler, schedule_id))
+        return buttons
+
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        schedule_buttons,
+        domain=Platform.BUTTON,
+        fingerprint=scheduler.fingerprint,
+        listen=[scheduler],
+    )
 
 
 class MowDeckButton(MowDeckEntity, ButtonEntity):
@@ -126,3 +154,48 @@ class BladeChangedButton(MowDeckEntity, ButtonEntity):
             self.coordinator.client.reset_blade(self.mower_id), "blade_changed", "fleet.manage"
         )
         self._health.async_set_totals(self.mower_id, totals)
+
+
+class ScheduleRunButton(ScheduleEntity, ButtonEntity):
+    """Starts a schedule now (``run-now``, ``mower.control``) without its rain pause; the
+    next firing stays as it is."""
+
+    def __init__(
+        self,
+        coordinator: MowDeckCoordinator,
+        mower_id: str,
+        scheduler: SchedulerCoordinator,
+        schedule_id: str,
+    ) -> None:
+        """Create the button."""
+        super().__init__(coordinator, mower_id, scheduler, schedule_id, "schedule_run_now")
+
+    async def async_press(self) -> None:
+        """Start the schedule now."""
+        await self.async_schedule_action(
+            self.coordinator.client.run_schedule_now(self.schedule_id),
+            "schedule_run_now",
+            "mower.control",
+        )
+
+
+class ScheduleSkipButton(ScheduleEntity, ButtonEntity):
+    """Skips the schedule's next firing (``skip-next``, ``schedule.edit``)."""
+
+    def __init__(
+        self,
+        coordinator: MowDeckCoordinator,
+        mower_id: str,
+        scheduler: SchedulerCoordinator,
+        schedule_id: str,
+    ) -> None:
+        """Create the button."""
+        super().__init__(coordinator, mower_id, scheduler, schedule_id, "schedule_skip_next")
+
+    async def async_press(self) -> None:
+        """Skip the next firing (MowDeck answers 409 when there is none)."""
+        await self.async_schedule_action(
+            self.coordinator.client.skip_next_run(self.schedule_id),
+            "schedule_skip_next",
+            "schedule.edit",
+        )

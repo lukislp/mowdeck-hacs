@@ -1,4 +1,5 @@
-"""Sensors of a MowDeck mower: values of the Telemetry ``MowerState`` and health totals."""
+"""Sensors of a MowDeck mower: values of the Telemetry ``MowerState``, health totals and the
+Scheduler (next start, last schedule run, rain pause, wet lawn)."""
 
 from __future__ import annotations
 
@@ -25,8 +26,9 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .const import SPEED_DECIMALS
+from .const import RUN_OUTCOMES, SPEED_DECIMALS
 from .entity import MowDeckEntity, async_add_mower_entities
+from .scheduler import parse_time
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -34,6 +36,7 @@ if TYPE_CHECKING:
     from . import MowDeckConfigEntry
     from .coordinator import MowDeckCoordinator
     from .health import HealthCoordinator
+    from .scheduler import SchedulerCoordinator
 
 PARALLEL_UPDATES = 0
 
@@ -289,6 +292,19 @@ async def async_setup_entry(
         ],
         domain=Platform.SENSOR,
     )
+    scheduler = entry.runtime_data.scheduler
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, m: (
+            [SchedulerSensor(coordinator, m, scheduler, d) for d in SCHEDULER_SENSORS]
+            if scheduler.data.available
+            else []
+        ),
+        domain=Platform.SENSOR,
+        fingerprint=lambda m: scheduler.data.available,
+        listen=[scheduler],
+    )
 
 
 class MowDeckSensor(MowDeckEntity, SensorEntity):
@@ -342,3 +358,105 @@ class MowDeckSensor(MowDeckEntity, SensorEntity):
             "error_source": extras.get("error_source"),
             "drive_recoverable": bool(state.get("drive_recoverable", False)),
         }
+
+
+def _next_mow(scheduler: SchedulerCoordinator, mower_id: str) -> datetime | None:
+    upcoming = scheduler.next_mow(mower_id)
+    return upcoming[0] if upcoming else None
+
+
+def _next_mow_attributes(scheduler: SchedulerCoordinator, mower_id: str) -> dict[str, Any]:
+    upcoming = scheduler.next_mow(mower_id)
+    schedule = upcoming[1] if upcoming else {}
+    return {"schedule": schedule.get("name"), "schedule_id": schedule.get("id")}
+
+
+def _last_run(scheduler: SchedulerCoordinator, mower_id: str) -> str | None:
+    found = scheduler.last_run(mower_id)
+    outcome = found[0].get("outcome") if found else None
+    return outcome if outcome in RUN_OUTCOMES else None
+
+
+def _last_run_attributes(scheduler: SchedulerCoordinator, mower_id: str) -> dict[str, Any]:
+    found = scheduler.last_run(mower_id)
+    run, schedule = found if found else ({}, {})
+    return {
+        "schedule": schedule.get("name"),
+        "schedule_id": schedule.get("id"),
+        "scheduled_for": run.get("scheduled_for"),
+        "started_at": run.get("started_at"),
+        "trigger": run.get("trigger"),
+        "details": run.get("details"),
+        "followup": run.get("followup"),
+    }
+
+
+def _decision_time(key: str) -> Callable[[SchedulerCoordinator, str], datetime | None]:
+    def read(scheduler: SchedulerCoordinator, mower_id: str) -> datetime | None:
+        return parse_time((scheduler.data.weather.get(mower_id) or {}).get(key))
+
+    return read
+
+
+@dataclass(frozen=True, kw_only=True)
+class SchedulerSensorDescription(SensorEntityDescription):
+    """A sensor of the Scheduler's data for one mower."""
+
+    value_fn: Callable[[SchedulerCoordinator, str], Any]
+    attributes_fn: Callable[[SchedulerCoordinator, str], dict[str, Any]] | None = None
+
+
+SCHEDULER_SENSORS: tuple[SchedulerSensorDescription, ...] = (
+    SchedulerSensorDescription(
+        key="next_mow",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=_next_mow,
+        attributes_fn=_next_mow_attributes,
+    ),
+    SchedulerSensorDescription(
+        key="last_schedule_run",
+        device_class=SensorDeviceClass.ENUM,
+        options=RUN_OUTCOMES,
+        value_fn=_last_run,
+        attributes_fn=_last_run_attributes,
+    ),
+    SchedulerSensorDescription(
+        key="rain_pause_until",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=_decision_time("pause_until"),
+    ),
+    SchedulerSensorDescription(
+        key="lawn_wet_until",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=_decision_time("wet_until"),
+    ),
+)
+
+
+class SchedulerSensor(MowDeckEntity, SensorEntity):
+    """A value of the Scheduler for the mower: next start, last run, rain pause, wet lawn."""
+
+    entity_description: SchedulerSensorDescription
+
+    def __init__(
+        self,
+        coordinator: MowDeckCoordinator,
+        mower_id: str,
+        scheduler: SchedulerCoordinator,
+        description: SchedulerSensorDescription,
+    ) -> None:
+        """Create the sensor from its description."""
+        super().__init__(coordinator, mower_id, description.key, service=scheduler)
+        self.entity_description = description
+        self._scheduler = scheduler
+
+    @property
+    def native_value(self) -> Any:
+        """The value computed from the Scheduler's data."""
+        return self.entity_description.value_fn(self._scheduler, self.mower_id)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """The schedule behind the value, where there is one."""
+        attributes = self.entity_description.attributes_fn
+        return attributes(self._scheduler, self.mower_id) if attributes else None

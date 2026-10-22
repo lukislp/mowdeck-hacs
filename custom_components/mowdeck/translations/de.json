@@ -73,6 +73,40 @@
       },
       "error": {
         "name": "Fehler"
+      },
+      "rain_hold": {
+        "name": "Regenpause",
+        "state_attributes": {
+          "verdict": {
+            "name": "Entscheidung",
+            "state": {
+              "run": "Mähen",
+              "hold": "Pausieren",
+              "unknown_run": "Keine Vorhersage, mähen",
+              "unknown_hold": "Keine Vorhersage, pausieren",
+              "no_location": "Kein Standort",
+              "disabled": "Regenpause aus"
+            }
+          },
+          "reason": {
+            "name": "Grund"
+          },
+          "wet": {
+            "name": "Rasen nass"
+          },
+          "recent_mm_6h": {
+            "name": "Regen der letzten 6 Stunden"
+          },
+          "recent_mm_24h": {
+            "name": "Regen der letzten 24 Stunden"
+          },
+          "provider": {
+            "name": "Wetterdienst"
+          },
+          "attribution": {
+            "name": "Quellenangabe"
+          }
+        }
       }
     },
     "button": {
@@ -90,6 +124,12 @@
       },
       "blade_changed": {
         "name": "Messer gewechselt"
+      },
+      "schedule_run_now": {
+        "name": "{schedule} jetzt starten"
+      },
+      "schedule_skip_next": {
+        "name": "Nächsten Lauf von {schedule} überspringen"
       }
     },
     "camera": {
@@ -251,11 +291,35 @@
             "name": "Zählung von MowDeck"
           }
         }
+      },
+      "next_mow": {
+        "name": "Nächstes Mähen"
+      },
+      "last_schedule_run": {
+        "name": "Letzter Zeitplanlauf",
+        "state": {
+          "started": "Gestartet",
+          "skipped_rain": "Wegen Regen übersprungen",
+          "skipped_permission": "Übersprungen, keine Berechtigung",
+          "skipped_window": "Übersprungen, Zeitfenster vorbei",
+          "skipped_mower_busy": "Übersprungen, Mähroboter beschäftigt",
+          "skipped_manual": "Manuell übersprungen",
+          "failed": "Fehlgeschlagen"
+        }
+      },
+      "rain_pause_until": {
+        "name": "Regenpause bis"
+      },
+      "lawn_wet_until": {
+        "name": "Rasen nass bis"
       }
     },
     "switch": {
       "light": {
         "name": "Kameralicht"
+      },
+      "schedule": {
+        "name": "Zeitplan {schedule}"
       }
     },
     "update": {
@@ -319,6 +383,10 @@
     "health_forbidden": {
       "title": "MowDeck verweigert die Zustandsdaten der Mähroboter",
       "description": "MowDeck unter {url} beantwortet die Zustandswerte (Messerstunden, Mähstunden, Strecke, Ladezyklen) für dieses API-Token mit „verboten“, daher sind diese Sensoren nicht verfügbar. Gib dem Token in der MowDeck-App die Berechtigung {permission}. Diese Meldung verschwindet mit der nächsten erfolgreichen Aktualisierung."
+    },
+    "scheduler_forbidden": {
+      "title": "MowDeck verweigert die Zeitpläne",
+      "description": "MowDeck unter {url} beantwortet die Zeitpläne oder die Regenentscheidung für dieses API-Token mit „verboten“, daher sind die Zeitplan- und Regen-Entitäten nicht verfügbar. Gib dem Token in der MowDeck-App die Berechtigung {permission} (sie folgt mower.view). Diese Meldung verschwindet mit der nächsten erfolgreichen Aktualisierung."
     }
   },
   "services": {

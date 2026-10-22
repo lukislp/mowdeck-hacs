@@ -24,6 +24,8 @@ PUSH_POLL_INTERVAL: Final = timedelta(minutes=5)
 STATIC_REFRESH: Final = timedelta(minutes=10)
 # Health totals (blade hours, mowing hours, distance, battery cycles) change slowly.
 HEALTH_REFRESH: Final = timedelta(minutes=15)
+# Schedules, their runs and the rain decision; also refreshed right after schedule actions.
+SCHEDULER_REFRESH: Final = timedelta(minutes=5)
 # A state older than this counts as offline (Telemetry's own stale flag also counts).
 STALE_AFTER: Final = timedelta(minutes=5)
 
@@ -67,6 +69,18 @@ CAN_CONTROL: Final = "can_control"
 CAN_DRIVE: Final = "can_drive"
 CAN_MANAGE_MOWERS: Final = "can_manage_mowers"
 CAN_EDIT_SCHEDULE: Final = "can_edit_schedule"
+# Outcomes of a schedule run (ScheduleRunOutcome in apps/web/openapi/scheduler.json).
+RUN_OUTCOMES: Final = [
+    "started",
+    "skipped_rain",
+    "skipped_permission",
+    "skipped_window",
+    "skipped_mower_busy",
+    "skipped_manual",
+    "failed",
+]
+# Verdicts of the rain decision (RainDecisionOut.verdict).
+RAIN_VERDICTS: Final = ["run", "hold", "unknown_run", "unknown_hold", "no_location", "disabled"]
 RELATION_PERMISSION: Final = {
     CAN_CONTROL: "mower.control",
     CAN_DRIVE: "mower.drive",
