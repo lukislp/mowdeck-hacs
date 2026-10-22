@@ -15,7 +15,10 @@
     },
     "button": {
       "emergency_stop": { "default": "mdi:alert-octagon" },
-      "return_to_dock": { "default": "mdi:home-import-outline" }
+      "return_to_dock": { "default": "mdi:home-import-outline" },
+      "end_job": { "default": "mdi:stop-circle-outline" },
+      "firmware_check": { "default": "mdi:cloud-search-outline" },
+      "blade_changed": { "default": "mdi:saw-blade" }
     },
     "number": {
       "blade_height": { "default": "mdi:arrow-expand-vertical" },

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Callable, Iterator
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 import pytest
 from aiohttp.test_utils import TestServer
@@ -33,6 +33,18 @@ def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
 def fast_retries() -> Iterator[None]:
     """No real sleeping between API retries and WebSocket reconnects."""
     with patch("custom_components.mowdeck.realtime.MIN_BACKOFF", 0.01):
+        yield
+
+
+@pytest.fixture
+def entity_registry_enabled_by_default() -> Iterator[None]:
+    """Create the entities that are disabled by default enabled (as Home Assistant's own
+    test suite does)."""
+    with patch(
+        "homeassistant.helpers.entity.Entity.entity_registry_enabled_default",
+        new_callable=PropertyMock,
+        return_value=True,
+    ):
         yield
 
 

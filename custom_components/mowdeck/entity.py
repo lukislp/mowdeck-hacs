@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Hashable, Iterable
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
 
 from .api import MowDeckError, MowDeckForbiddenError
 from .const import COMMAND_PERMISSION, DEFAULT_COMMAND_PERMISSION, DOMAIN, MANUFACTURER
@@ -20,29 +21,50 @@ if TYPE_CHECKING:
     from . import MowDeckConfigEntry
 
 
+def mower_device_info(coordinator: MowDeckCoordinator, mower_id: str) -> DeviceInfo:
+    """The device of a mower (one per mower)."""
+    mower = coordinator.data.mowers.get(mower_id, {})
+    return DeviceInfo(
+        identifiers={(DOMAIN, mower_id)},
+        name=mower.get("name") or "MowDeck mower",
+        manufacturer=MANUFACTURER,
+        model=coordinator.model(mower_id),
+        serial_number=mower.get("serial"),
+        sw_version=coordinator.firmware_version(mower_id),
+        configuration_url=f"{coordinator.client.base_url}/mowers/{mower_id}",
+    )
+
+
 class MowDeckEntity(CoordinatorEntity[MowDeckCoordinator]):
-    """An entity of one mower; one device per mower."""
+    """An entity of one mower; one device per mower.
+
+    ``service`` is the coordinator of a further MowDeck service the entity reads (health,
+    scheduler, ...): the entity also updates with it and is unavailable while it fails.
+    """
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: MowDeckCoordinator, mower_id: str, key: str) -> None:
+    def __init__(
+        self,
+        coordinator: MowDeckCoordinator,
+        mower_id: str,
+        key: str,
+        *,
+        service: DataUpdateCoordinator[Any] | None = None,
+    ) -> None:
         """Bind the entity to a mower; ``key`` is the unique id suffix and translation key."""
         super().__init__(coordinator)
         self.mower_id = mower_id
+        self.service = service
         self._attr_unique_id = f"{mower_id}_{key}"
         self._attr_translation_key = key
-        mower = coordinator.data.mowers.get(mower_id, {})
-        caps = coordinator.data.capabilities.get(mower_id, {})
-        state = coordinator.data.states.get(mower_id, {})
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, mower_id)},
-            name=mower.get("name") or "MowDeck mower",
-            manufacturer=MANUFACTURER,
-            model=caps.get("model") or mower.get("model"),
-            serial_number=mower.get("serial"),
-            sw_version=state.get("firmware") or (state.get("firmware_info") or {}).get("installed"),
-            configuration_url=f"{coordinator.client.base_url}/mowers/{mower_id}",
-        )
+        self._attr_device_info = mower_device_info(coordinator, mower_id)
+
+    async def async_added_to_hass(self) -> None:
+        """Also follow the service coordinator."""
+        await super().async_added_to_hass()
+        if self.service is not None:
+            self.async_on_remove(self.service.async_add_listener(self._handle_coordinator_update))
 
     @property
     def mower_state(self) -> dict[str, Any]:
@@ -56,28 +78,45 @@ class MowDeckEntity(CoordinatorEntity[MowDeckCoordinator]):
 
     async def async_send_command(self, command: dict[str, Any]) -> dict[str, Any]:
         """Send a Fleet command; API errors become translated Home Assistant errors."""
+        kind = str(command["kind"])
+        return await self.async_call_api(
+            self.coordinator.client.send_command(self.mower_id, command),
+            kind,
+            COMMAND_PERMISSION.get(kind, DEFAULT_COMMAND_PERMISSION),
+            forbidden_key="command_forbidden",
+            failed_key="command_failed",
+        )
+
+    async def async_call_api[T](
+        self,
+        request: Awaitable[T],
+        action: str,
+        permission: str,
+        *,
+        forbidden_key: str = "action_forbidden",
+        failed_key: str = "action_failed",
+    ) -> T:
+        """Await an API request; a 403 names ``permission``, other errors the API's reason."""
         try:
-            return await self.coordinator.client.send_command(self.mower_id, command)
+            return await request
         except MowDeckForbiddenError as err:
-            kind = str(command["kind"])
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
-                translation_key="command_forbidden",
-                translation_placeholders={
-                    "command": kind,
-                    "permission": COMMAND_PERMISSION.get(kind, DEFAULT_COMMAND_PERMISSION),
-                },
+                translation_key=forbidden_key,
+                translation_placeholders={"command": action, "permission": permission},
             ) from err
         except MowDeckError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
-                translation_key="command_failed",
-                translation_placeholders={"command": str(command["kind"]), "error": str(err)},
+                translation_key=failed_key,
+                translation_placeholders={"command": action, "error": str(err)},
             ) from err
 
     @property
     def available(self) -> bool:
         """Available while the mower is visible to the token and the API answers."""
+        if self.service is not None and not self.service.last_update_success:
+            return False
         return super().available and self.mower_id in self.coordinator.data.mowers
 
 
@@ -86,18 +125,56 @@ def async_add_mower_entities(
     entry: MowDeckConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
     factory: Callable[[MowDeckCoordinator, str], Iterable[Entity]],
+    *,
+    domain: str | None = None,
+    fingerprint: Callable[[str], Hashable] | None = None,
+    listen: Iterable[DataUpdateCoordinator[Any]] = (),
 ) -> None:
-    """Add the entities of every mower now and of mowers that later polls discover."""
+    """Add the entities of every mower and keep them in line with what the mower offers.
+
+    The factory runs for a new mower and again whenever the mower's ``fingerprint`` changes
+    (default: capabilities, permissions and map areas; ``listen`` adds coordinators whose
+    updates are checked too). Entities it newly yields are added; with ``domain`` set, entities
+    it no longer yields are removed from the entity registry (a capability or a permission
+    went away). Mowers that disappear keep their entities until their device is removed.
+    """
     coordinator = entry.runtime_data.coordinator
-    known: set[str] = set()
+    fingerprint_of = fingerprint or coordinator.fingerprint
+    added: dict[str, set[str]] = {}
+    seen: dict[str, Hashable] = {}
 
     @callback
-    def _add_new() -> None:
-        new = [mower_id for mower_id in coordinator.data.mowers if mower_id not in known]
-        if not new:
-            return
-        known.update(new)
-        async_add_entities([entity for m in new for entity in factory(coordinator, m)])
+    def _sync() -> None:
+        new: list[Entity] = []
+        for mower_id in list(coordinator.data.mowers):
+            current = fingerprint_of(mower_id)
+            if mower_id in seen and seen[mower_id] == current:
+                continue
+            seen[mower_id] = current
+            entities = list(factory(coordinator, mower_id))
+            wanted = {str(entity.unique_id) for entity in entities}
+            known = added.setdefault(mower_id, set())
+            new.extend(entity for entity in entities if entity.unique_id not in known)
+            if domain is not None:
+                _async_remove_entities(entry, domain, known - wanted)
+                known.intersection_update(wanted)
+            known.update(wanted)
+        if new:
+            async_add_entities(new)
 
-    _add_new()
-    entry.async_on_unload(coordinator.async_add_listener(_add_new))
+    _sync()
+    entry.async_on_unload(coordinator.async_add_listener(_sync))
+    for other in listen:
+        entry.async_on_unload(other.async_add_listener(_sync))
+
+
+@callback
+def _async_remove_entities(entry: MowDeckConfigEntry, domain: str, unique_ids: set[str]) -> None:
+    """Remove entities the mower no longer offers from the entity registry."""
+    if not unique_ids:
+        return
+    registry = er.async_get(entry.runtime_data.coordinator.hass)
+    for unique_id in unique_ids:
+        entity_id = registry.async_get_entity_id(domain, DOMAIN, unique_id)
+        if entity_id is not None:
+            registry.async_remove(entity_id)

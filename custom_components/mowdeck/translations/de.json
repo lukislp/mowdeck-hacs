@@ -19,6 +19,18 @@
         "data": {
           "api_token": "API-Token"
         }
+      },
+      "reconfigure": {
+        "title": "MowDeck neu konfigurieren",
+        "description": "Ändere die Adresse deiner MowDeck-Installation, zum Beispiel nach einem Umzug. Gib nur dann ein neues API-Token ein, wenn du das bisherige ersetzen willst; es muss zum selben MowDeck-Konto gehören.",
+        "data": {
+          "url": "URL",
+          "api_token": "API-Token"
+        },
+        "data_description": {
+          "url": "Basis-URL der MowDeck-Web-App, zum Beispiel {example_url}",
+          "api_token": "Optional. Leer lassen, um das bisherige Token zu behalten."
+        }
       }
     },
     "error": {
@@ -32,7 +44,8 @@
     "abort": {
       "already_configured": "Dieses MowDeck-Konto ist bereits eingerichtet.",
       "reauth_successful": "Das API-Token wurde aktualisiert.",
-      "wrong_account": "Das neue Token gehört zu einem anderen MowDeck-Konto."
+      "wrong_account": "Das neue Token gehört zu einem anderen MowDeck-Konto.",
+      "reconfigure_successful": "Die MowDeck-Verbindung wurde aktualisiert."
     }
   },
   "options": {
@@ -68,6 +81,15 @@
       },
       "return_to_dock": {
         "name": "Zur Station"
+      },
+      "end_job": {
+        "name": "Auftrag beenden"
+      },
+      "firmware_check": {
+        "name": "Jetzt nach Firmware suchen"
+      },
+      "blade_changed": {
+        "name": "Messer gewechselt"
       }
     },
     "camera": {
@@ -199,7 +221,15 @@
         "name": "Signal der Bluetooth-Bridge"
       },
       "blade_hours": {
-        "name": "Messerstunden seit Wechsel"
+        "name": "Messerstunden seit Wechsel",
+        "state_attributes": {
+          "threshold": {
+            "name": "Erinnerungsschwelle"
+          },
+          "changed_at": {
+            "name": "Letzter Messerwechsel"
+          }
+        }
       },
       "mowing_hours": {
         "name": "Mähstunden"
@@ -273,12 +303,22 @@
     },
     "camera_lease_lost": {
       "message": "Der Kamera-Stream wurde auf MowDeck-Seite beendet. Öffne die Kamera erneut"
+    },
+    "action_failed": {
+      "message": "MowDeck-Aktion {command} ist fehlgeschlagen: {error}"
+    },
+    "action_forbidden": {
+      "message": "Das API-Token darf {command} nicht ausführen. Gib dem Token in der MowDeck-App die Berechtigung {permission}."
     }
   },
   "issues": {
     "realtime_unauthorized": {
       "title": "MowDeck-Live-Updates werden abgelehnt",
       "description": "MowDeck unter {url} lehnt die Live-Verbindung auch mit einem frischen Zugriffstoken ab, deshalb fragt Home Assistant nur noch alle paar Minuten ab. Prüfe, ob das API-Token noch existiert und die Berechtigung mower.view hat, oder erstelle ein neues Token und gib es über Neu konfigurieren an der Integration ein. Diese Meldung verschwindet, sobald die Live-Verbindung wieder funktioniert."
+    },
+    "health_forbidden": {
+      "title": "MowDeck verweigert die Zustandsdaten der Mähroboter",
+      "description": "MowDeck unter {url} beantwortet die Zustandswerte (Messerstunden, Mähstunden, Strecke, Ladezyklen) für dieses API-Token mit „verboten“, daher sind diese Sensoren nicht verfügbar. Gib dem Token in der MowDeck-App die Berechtigung {permission}. Diese Meldung verschwindet mit der nächsten erfolgreichen Aktualisierung."
     }
   },
   "services": {

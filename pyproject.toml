@@ -32,7 +32,8 @@ branch = true
 source = ["custom_components/mowdeck"]
 
 [tool.coverage.report]
-fail_under = 80
+# Home Assistant's Silver quality scale asks for more than 95 % (quality_scale.yaml).
+fail_under = 95
 show_missing = true
 
 [tool.mypy]

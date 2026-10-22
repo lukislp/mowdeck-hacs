@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .entity import MowDeckEntity, async_add_mower_entities
@@ -32,6 +33,7 @@ async def async_setup_entry(
             if coordinator.data.capabilities.get(m, {}).get("light")
             else []
         ),
+        domain=Platform.SWITCH,
     )
 
 

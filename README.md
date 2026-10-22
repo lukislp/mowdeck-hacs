@@ -9,6 +9,7 @@ Custom integration (HACS) that brings the mowers of a [MowDeck](https://github.c
 
 - Domain `mowdeck`, IoT class `local_push`, integration type `hub` (one entry per MowDeck account, one device per mower).
 - Requires Home Assistant 2026.10.0 or newer (`hacs.json`).
+- [Integration quality scale](https://developers.home-assistant.io/docs/core/integration-quality-scale/): Silver (`custom_components/mowdeck/quality_scale.yaml`; tests keep the coverage above 95 %).
 - Licence: AGPL-3.0-only, like the rest of MowDeck.
 - Releases: semantic versions on the 0.x line, SSH-signed tags, `mowdeck.zip` with Sigstore signatures and build provenance (see `SECURITY.md`).
 
@@ -24,10 +25,12 @@ In the MowDeck web app: **Settings, API tokens, New token**. Give it a name ("Ho
 
 | Permission | Needed for |
 | --- | --- |
-| `mower.view` | required: mowers, states, map, live updates, the cameras |
-| `mower.control` | start, pause, dock, blade height, mowing speed, light (without it Home Assistant is read only; the emergency stop works for viewers too) |
+| `mower.view` | required: mowers, states, map, live updates, the cameras, the health totals, **Check firmware now** |
+| `mower.control` | start, pause, dock, end job, blade height, mowing speed, light (without it Home Assistant is read only; the emergency stop works for viewers too) |
 | `mower.drive` | optional: the manual drive speed setting (the number is disabled by default) |
-| `fleet.manage` | optional: installing a firmware update from the update entity |
+| `fleet.manage` | optional: installing a firmware update from the update entity, **Blade changed** |
+
+The integration asks MowDeck which of these the token holds on each mower (`POST /api/v1/identity/me/permissions`, every 10 minutes) and only creates entities whose action the token may run; a MowDeck that cannot answer that question hides nothing, and a refused action names the missing permission.
 
 The secret (`mdk_...`) is shown once. Through the API: `POST /api/v1/identity/accounts/{account_id}/api-tokens` with `{"name": "Home Assistant", "grants": [{"level": {"type": "account", "id": "<account id>"}, "permissions": ["mower.view", "mower.control"]}]}`.
 
@@ -44,24 +47,39 @@ The flow exchanges the token, reads `/api/v1/identity/me` and lists the mowers; 
 
 **Options** (Configure on the entry): the poll interval while the live connection is down (default 60 s, 15 to 3600) and whether to show the emergency stop button (default on).
 
+**Reconfigure** (three dots on the entry): a new URL when MowDeck moved, optionally with a new API token. Leave the token empty to keep the current one; a token of another MowDeck account is refused.
+
+## Data updates
+
+| Data | How | How often |
+| --- | --- | --- |
+| Mower states | pushed over the MowDeck Realtime WebSocket | live; polled every 60 s (the poll interval option) only while the socket is down |
+| Mower list | polled | every 5 minutes while the socket is up (finds new and removed mowers) |
+| Capabilities, map, token permissions | polled | every 10 minutes |
+| Health totals (blade hours, mowing hours, distance, battery cycles) | polled, own coordinator | every 15 minutes |
+
+Each MowDeck service has its own coordinator: when one fails, only its entities turn unavailable. When one answers "forbidden" (403), a Repairs issue names the permission the token lacks; it disappears with the next successful update.
+
 ## Entities
 
 Per mower one device (manufacturer Mammotion, model from the capabilities, firmware as software version, a link to the mower page of the web app):
 
 | Entity | Example id | Source |
 | --- | --- | --- |
-| Lawn mower | `lawn_mower.luba` | activity: `mowing`, `paused`, `returning`, `docked` (also while charging), `idle`, `error`; start, pause, dock |
+| Lawn mower | `lawn_mower.luba` | activity: `mowing`, `paused`, `returning`, `docked` (also while charging), `idle`, `error`; start, pause, dock (pauses the job), stop (ends the job and docks) |
 | Battery | `sensor.luba_battery` | `battery_percent` |
 | Activity | `sensor.luba_activity` | the MowDeck activity (enum, includes `charging`, `offline` and `updating`) |
-| RTK fix, RTK source, Connection | `sensor.luba_rtk_fix`, ... | enums (diagnostic) |
+| RTK fix, RTK source, Connection | `sensor.luba_rtk_fix`, ... | enums (diagnostic; RTK source and Connection are disabled by default) |
 | Blade height, Speed | `sensor.luba_blade_height`, `sensor.luba_speed` | whole mm; m/s with two decimals |
-| Last seen | `sensor.luba_last_seen` | `observed_at`, when the mower last reported values (diagnostic) |
+| Last seen | `sensor.luba_last_seen` | `observed_at`, when the mower last reported values (diagnostic, disabled by default) |
 | Error code | `sensor.luba_error_code` | `error_code` with the attributes `error_message`, `error_category` (`trapped`, `obstacle`, `outside`, `wheel_slip`, `lift_tilt`, `collision`, `battery`, `blade_motor`, `rain`, `positioning`, `other`), `error_source` and `drive_recoverable` (diagnostic). Category and source come from the adapter's extras and are only set while an error code is |
-| Blade hours since change, Mowing hours, Distance driven, Battery cycles | `sensor.luba_blade_hours_since_change`, ... | MowDeck's health totals (`/telemetry/mowers/{id}/health`, refreshed every 10 minutes); blade hours follow the counter MowDeck shows (the mower's own or MowDeck's), distance in km; battery cycles are the mower's own lifetime counter when it reports one (attribute `source`: `device`, MowDeck's own count in `tracked_cycles`), MowDeck's count otherwise (`source`: `telemetry`) |
-| Bluetooth bridge signal | `sensor.luba_bluetooth_bridge_signal` | RSSI of the mower at the bridge in dBm (diagnostic); only for mowers whose connection supports a `ble_bridge` link |
+| Blade hours since change, Mowing hours, Distance driven, Battery cycles | `sensor.luba_blade_hours_since_change`, ... | MowDeck's health totals (`/telemetry/mowers/{id}/health`, refreshed every 15 minutes); blade hours follow the counter MowDeck shows (the mower's own or MowDeck's) with the attributes `threshold` (the reminder threshold of that counter) and `changed_at` (the last blade change recorded in MowDeck), distance in km; battery cycles are the mower's own lifetime counter when it reports one (attribute `source`: `device`, MowDeck's own count in `tracked_cycles`), MowDeck's count otherwise (`source`: `telemetry`) |
+| Bluetooth bridge signal | `sensor.luba_bluetooth_bridge_signal` | RSSI of the mower at the bridge in dBm (diagnostic, disabled by default); only for mowers whose connection supports a `ble_bridge` link |
 | Charging, Error | `binary_sensor.luba_charging`, `binary_sensor.luba_error` | |
 | Online | `binary_sensor.luba_online` | the gateway holds a live link: not stale, not `connected: false`, a state within the last 5 minutes (the gateway repeats it every 10 s), not `offline` |
-| Emergency stop, Return to dock | `button.luba_emergency_stop`, `button.luba_return_to_dock` | the emergency stop can be hidden in the options |
+| Emergency stop, Return to dock, End job | `button.luba_emergency_stop`, `button.luba_return_to_dock`, `button.luba_end_job` | the emergency stop can be hidden in the options; Return to dock pauses a running job (start resumes it), End job ends it (`return_to_dock` with `end_job`) |
+| Check firmware now | `button.luba_check_firmware_now` | asks the vendor for a firmware update now (`POST /fleet/mowers/{id}/firmware/check`); the firmware entity shows the answer at once. Only for mowers whose connection can update firmware |
+| Blade changed | `button.luba_blade_changed` | records a blade change in MowDeck (`POST /telemetry/mowers/{id}/health/blade-reset`): the blade hours since the change restart at zero. Disabled by default; needs `fleet.manage` |
 | Blade height, Mowing speed | `number.luba_blade_height`, `number.luba_mowing_speed` | ranges from the mower's capabilities (`blade_height_range_mm`, `min_speed_mps` / `max_speed_mps`); the speed in steps of 0.01 m/s, shown and sent with two decimals |
 | Manual drive speed | `number.luba_manual_drive_speed` | the vendor's speed setting for joystick driving (`drive_speed_setting`, `set_drive_speed`); disabled by default, needs `mower.drive`; only for mowers that have the setting |
 | Firmware | `update.luba_firmware` | installed and offered firmware with release notes and progress (`firmware_info`); install sends `firmware_update` (MowDeck requires the mower docked with enough battery; needs `fleet.manage`); only for mowers whose connection can update firmware |
@@ -130,7 +148,16 @@ data:
 - **Commands fail with "may not send"**: the token lacks the permission the message names on that mower (`mower.control` for the job commands, `mower.drive` for the drive speed, `fleet.manage` for firmware updates).
 - **Camera stays black or "connecting"**: the browser does not reach the relay's media port. Check from the same device that `RELAY_ICE_HOSTS` contains an address it can reach and that port 8189 (UDP and TCP) is open on the MowDeck host; the MowDeck web app on that device shows the same problem then.
 - **"The mower's camera did not start in time"**: the mower did not publish within 40 s (4G gaps, a sleeping mower that wakes slowly). Open the camera again.
-- **Diagnostics** (three dots on the entry) contain mowers, states, capabilities and the realtime status; the API token, connection options, serials and positions are redacted.
+- **"MowDeck refuses the mower health data" (Repairs)**: the health totals answer 403 for the token. Grant the named permission; the issue disappears with the next update (every 15 minutes).
+- **Diagnostics** (three dots on the entry) contain mowers, states, capabilities, the token's permissions per mower, the health totals and the realtime status; the API token, connection options, serials, vendor ids, positions and all coordinates are redacted, and maps are reduced to counts (no area names or boundaries).
+
+## Removal
+
+1. **Settings, Devices and services, MowDeck**, three dots on the entry, **Delete**. This removes the devices and entities of that MowDeck account from Home Assistant.
+2. In the MowDeck web app (**Settings, API tokens**) revoke the token you created for Home Assistant.
+3. Optionally uninstall **MowDeck** in HACS (or delete `<config>/custom_components/mowdeck`) and restart Home Assistant.
+
+A single mower that is no longer visible to the token disappears from Home Assistant by itself after the next poll; its device can also be deleted by hand.
 
 ## Development
 

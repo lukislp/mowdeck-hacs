@@ -172,7 +172,7 @@ async def test_firmware_update(hass: HomeAssistant, fake_api: FakeMowDeck) -> No
     assert state_of(hass, FIRMWARE).attributes["latest_version"] == "1.11.0"
 
 
-@pytest.mark.usefixtures("rich_mower", "loaded_entry")
+@pytest.mark.usefixtures("rich_mower", "entity_registry_enabled_by_default", "loaded_entry")
 async def test_bridge_signal(hass: HomeAssistant, fake_api: FakeMowDeck) -> None:
     """The Bluetooth bridge's RSSI in whole dBm."""
     signal = state_of(hass, "sensor.luba_bluetooth_bridge_signal")
@@ -210,9 +210,8 @@ async def test_battery_cycles_from_the_device_counter(
             "battery_cycles_source": "device",
         }
     )
-    coordinator = loaded_entry.runtime_data.coordinator
-    coordinator._static_fetched_at.clear()
-    await coordinator.async_refresh()
+    health = loaded_entry.runtime_data.health
+    await health.async_refresh()
     await hass.async_block_till_done()
     cycles = state_of(hass, "sensor.luba_battery_cycles")
     assert cycles.state == "152"
@@ -226,8 +225,7 @@ async def test_battery_cycles_from_the_device_counter(
             "battery_cycles_source": "telemetry",
         }
     )
-    coordinator._static_fetched_at.clear()
-    await coordinator.async_refresh()
+    await health.async_refresh()
     await hass.async_block_till_done()
     cycles = state_of(hass, "sensor.luba_battery_cycles")
     assert cycles.state == "3"
@@ -238,17 +236,18 @@ async def test_blade_hours_from_the_device_counter(
     hass: HomeAssistant, fake_api: FakeMowDeck, loaded_entry: MockConfigEntry
 ) -> None:
     """With blade_source device the mower's own counter is shown; no health means unknown."""
-    fake_api.health[MOWER_ID].update({"blade_source": "device", "device_blade_hours": 3.5})
-    coordinator = loaded_entry.runtime_data.coordinator
-    coordinator._static_fetched_at.clear()
-    await coordinator.async_refresh()
+    fake_api.health[MOWER_ID].update(
+        {"blade_source": "device", "device_blade_hours": 3.5, "device_blade_warn_hours": 60.0}
+    )
+    health = loaded_entry.runtime_data.health
+    await health.async_refresh()
     await hass.async_block_till_done()
-    assert state_of(hass, "sensor.luba_blade_hours_since_change").state == "3.5"
+    blade = state_of(hass, "sensor.luba_blade_hours_since_change")
+    assert blade.state == "3.5"
+    assert blade.attributes["threshold"] == 60.0
 
     fake_api.health.clear()
-    coordinator.data.health.clear()
-    coordinator._static_fetched_at.clear()
-    await coordinator.async_refresh()
+    await health.async_refresh()
     await hass.async_block_till_done()
     assert state_of(hass, "sensor.luba_mowing_hours").state == "unknown"
 

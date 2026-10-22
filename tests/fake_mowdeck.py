@@ -85,6 +85,29 @@ class FakeMowDeck:
     health: dict[str, dict[str, Any]] = field(default_factory=dict)
     commands: list[dict[str, Any]] = field(default_factory=list)
     forbid_commands: bool = False
+    # Relations POST /identity/me/permissions grants on every visible mower (None: the
+    # endpoint answers 404 like a MowDeck without it).
+    relations: set[str] | None = field(
+        default_factory=lambda: {
+            "can_view",
+            "can_control",
+            "can_drive",
+            "can_manage_mowers",
+            "can_edit_schedule",
+        }
+    )
+    permission_checks: int = 0
+    # Paths (prefix match) answered with 403, as for a token without the permission.
+    forbidden_paths: set[str] = field(default_factory=set)
+    # Paths (prefix match) answered with another problem status, or dropped mid-request.
+    problem_paths: dict[str, int] = field(default_factory=dict)
+    disconnect_paths: set[str] = field(default_factory=set)
+    me_overrides: dict[str, Any] = field(default_factory=dict)
+    token_overrides: dict[str, Any] = field(default_factory=dict)
+    permission_answer: Any = None
+    ws_error_before_ready: bool = False
+    firmware_check_status: int | None = None
+    blade_resets: list[dict[str, Any]] = field(default_factory=list)
     fail_requests: int = 0
     exchanges: int = 0
     requests: list[str] = field(default_factory=list)
@@ -197,6 +220,11 @@ class FakeMowDeck:
         app = web.Application(middlewares=[self._middleware])
         app.router.add_post("/api/v1/identity/token", self._token)
         app.router.add_get("/api/v1/identity/me", self._me)
+        app.router.add_post("/api/v1/identity/me/permissions", self._my_permissions)
+        app.router.add_post("/api/v1/fleet/mowers/{mower_id}/firmware/check", self._firmware)
+        app.router.add_post(
+            "/api/v1/telemetry/mowers/{mower_id}/health/blade-reset", self._blade_reset
+        )
         app.router.add_get("/api/v1/fleet/mowers", self._mowers)
         app.router.add_post("/api/v1/fleet/mowers/{mower_id}/commands", self._command)
         app.router.add_get("/api/v1/fleet/commands/{command_id}", self._get_command)
@@ -232,6 +260,15 @@ class FakeMowDeck:
             if token not in self._access_tokens:
                 return problem(401, "Unauthorized", "invalid or expired access token")
             request["api_token"] = self._access_tokens[token]
+            if any(request.path.startswith(path) for path in self.forbidden_paths):
+                return problem(403, "Forbidden", "missing permission")
+            for path, status in self.problem_paths.items():
+                if request.path.startswith(path):
+                    return problem(status, "Problem", f"answered {status}")
+            if any(request.path.startswith(path) for path in self.disconnect_paths):
+                assert request.transport is not None
+                request.transport.close()
+                return web.Response(status=500)
         response: web.StreamResponse = await handler(request)
         return response
 
@@ -247,17 +284,16 @@ class FakeMowDeck:
         access = f"at-{next(self._counter)}"
         self._access_tokens[access] = api_token
         expires_at = datetime.now(UTC) + timedelta(seconds=self.expires_in)
-        return web.json_response(
-            {
-                "access_token": access,
-                "token_type": "Bearer",
-                "expires_in": self.expires_in,
-                "expires_at": expires_at.isoformat(),
-                "account_id": self.valid_api_tokens[api_token],
-                "refresh_token": None,
-                "session_id": None,
-            }
-        )
+        answer = {
+            "access_token": access,
+            "token_type": "Bearer",
+            "expires_in": self.expires_in,
+            "expires_at": expires_at.isoformat(),
+            "account_id": self.valid_api_tokens[api_token],
+            "refresh_token": None,
+            "session_id": None,
+        }
+        return web.json_response({**answer, **self.token_overrides})
 
     async def _me(self, request: web.Request) -> web.Response:
         return web.json_response(
@@ -272,8 +308,61 @@ class FakeMowDeck:
                 "plan": None,
                 "session_id": None,
                 "memberships": [],
+                **self.me_overrides,
             }
         )
+
+    async def _my_permissions(self, request: web.Request) -> web.Response:
+        if self.relations is None:
+            return web.Response(status=404, text="404: Not Found")
+        self.permission_checks += 1
+        body = await request.json()
+        if self.permission_answer is not None:
+            return web.json_response(self.permission_answer)
+        visible = {f"mower:{m['id']}" for m in self._visible(request)}
+        return web.json_response(
+            [
+                check["object"] in visible and check["relation"] in self.relations
+                for check in body["checks"]
+            ]
+        )
+
+    async def _firmware(self, request: web.Request) -> web.Response:
+        mower_id = request.match_info["mower_id"]
+        if mower_id not in {m["id"] for m in self._visible(request)}:
+            return problem(404, "Not found", "mower not found")
+        if self.firmware_check_status == 409:
+            return problem(409, "Conflict", "firmware-check-unsupported")
+        if self.firmware_check_status is not None:
+            return problem(self.firmware_check_status, "Unavailable", "the mower is offline")
+        return web.json_response(
+            {
+                "installed": "1.10.4",
+                "available": "1.12.0",
+                "update_state": "available",
+                "progress": None,
+                "release_notes": "Checked just now.",
+                "checked_at": now_iso(),
+                "failure_reason": None,
+            }
+        )
+
+    async def _blade_reset(self, request: web.Request) -> web.Response:
+        mower_id = request.match_info["mower_id"]
+        if mower_id not in {m["id"] for m in self._visible(request)}:
+            return problem(404, "Not found", "mower not found")
+        if self.relations is not None and "can_manage_mowers" not in self.relations:
+            return problem(403, "Forbidden", "missing can_manage_mowers on the mower")
+        self.blade_resets.append(await request.json())
+        health = self.health.setdefault(mower_id, {"mower_id": mower_id})
+        health.update(
+            {
+                "blade_hours_since_change": 0.0,
+                "blade_changed_at": now_iso(),
+                "blade_source": "telemetry",
+            }
+        )
+        return web.json_response(health)
 
     def _visible(self, request: web.Request) -> list[dict[str, Any]]:
         return self.mowers if self._account(request) == ACCOUNT_ID else []
@@ -519,6 +608,8 @@ class FakeMowDeck:
             await ws.close(code=4401, message=b"unauthorized")
             return ws
         self.ws_auth_tokens.append(token)
+        if self.ws_error_before_ready:
+            await ws.send_json({"type": "error", "code": "internal", "message": "warming up"})
         await ws.send_json({"type": "ready", "token_expires_at": now_iso()})
         self._sockets.append(ws)
         try:
@@ -543,6 +634,14 @@ class FakeMowDeck:
         """Send a server message to every authenticated socket."""
         for ws in list(self._sockets):
             await ws.send_json(message)
+
+    async def push_raw(self, data: str | bytes) -> None:
+        """Send a raw text or binary frame to every authenticated socket."""
+        for ws in list(self._sockets):
+            if isinstance(data, bytes):
+                await ws.send_bytes(data)
+            else:
+                await ws.send_str(data)
 
     async def push_state(self, mower_id: str, state: dict[str, Any]) -> None:
         """Store a state and push it like Realtime does."""
