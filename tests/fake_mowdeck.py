@@ -230,6 +230,8 @@ class FakeMowDeck:
     # Notifications: MowDeck answers 403 to API tokens (inbox_allowed False), like today.
     inbox_allowed: bool = False
     inbox: list[dict[str, Any]] = field(default_factory=list)
+    daily: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    heatmap_queries: list[dict[str, str]] = field(default_factory=list)
     firmware_check_status: int | None = None
     blade_resets: list[dict[str, Any]] = field(default_factory=list)
     fail_requests: int = 0
@@ -373,6 +375,9 @@ class FakeMowDeck:
         app.router.add_get(sched + "/{schedule_id}/preview", self._preview)
         app.router.add_get("/api/v1/scheduler/weather/{mower_id}", self._weather)
         app.router.add_get("/api/v1/notifications/inbox", self._inbox)
+        app.router.add_put("/api/v1/fleet/mowers/{mower_id}/mow-defaults", self._mow_defaults)
+        app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/health/daily", self._daily)
+        app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/heatmap", self._heatmap)
         camera = "/api/v1/fleet/mowers/{mower_id}/camera/session"
         app.router.add_post(camera, self._camera_open)
         app.router.add_post(camera + "/{lease_id}/renew", self._camera_renew)
@@ -583,6 +588,52 @@ class FakeMowDeck:
         self.weather_queries.append(dict(request.query))
         return web.json_response(
             {"mower_id": mower_id, "at": now_iso(), "decision": self.weather[mower_id]}
+        )
+
+    async def _mow_defaults(self, request: web.Request) -> web.Response:
+        mower_id = request.match_info["mower_id"]
+        mower = next((m for m in self._visible(request) if m["id"] == mower_id), None)
+        if mower is None:
+            return problem(404, "Not found", "mower not found")
+        if self.relations is not None and "can_control" not in self.relations:
+            return problem(403, "Forbidden", "missing can_control on the mower")
+        body = await request.json()
+        pattern = body["pattern"]
+        if pattern is not None:
+            allowed = {"name", "angle_deg", "border_laps", "spacing_m"}
+            if set(pattern) - allowed or not 0 <= pattern.get("angle_deg", 0) <= 180:
+                return problem(422, "Unprocessable", "invalid pattern")
+        mower["mow_defaults"] = {"pattern": pattern} if pattern is not None else None
+        return web.json_response(mower)
+
+    async def _daily(self, request: web.Request) -> web.Response:
+        mower_id = request.match_info["mower_id"]
+        if mower_id not in self.daily:
+            return problem(404, "Not found", "no telemetry yet")
+        day = request.query["from"]
+        assert request.query["to"] == day
+        days = [d for d in self.daily[mower_id] if d["day"] == day]
+        return web.json_response({"mower_id": mower_id, "from": day, "to": day, "days": days})
+
+    async def _heatmap(self, request: web.Request) -> web.Response:
+        mower_id = request.match_info["mower_id"]
+        if mower_id not in self.maps:
+            return problem(404, "Not found", "no-map-yet")
+        self.heatmap_queries.append(dict(request.query))
+        return web.json_response(
+            {
+                "mower_id": mower_id,
+                "layer": request.query["layer"],
+                "cell_m": float(request.query.get("cell", "1")),
+                "cells": [{"x": 1, "y": 2, "n": 5, "value": 0.8}],
+                "gaps": [],
+                "legend": {"kind": "ratio", "min": 0, "max": 1},
+                "reference": {"origin_lat": 48.137, "origin_lon": 11.575, "rotation_deg": 0},
+                "samples": 5,
+                "truncated": False,
+                "from": now_iso(),
+                "to": now_iso(),
+            }
         )
 
     async def _inbox(self, request: web.Request) -> web.Response:

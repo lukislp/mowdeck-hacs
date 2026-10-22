@@ -15,7 +15,11 @@
       "next_mow": { "default": "mdi:calendar-clock" },
       "last_schedule_run": { "default": "mdi:calendar-check" },
       "rain_pause_until": { "default": "mdi:weather-rainy" },
-      "lawn_wet_until": { "default": "mdi:water-outline" }
+      "lawn_wet_until": { "default": "mdi:water-outline" },
+      "mowing_time_today": { "default": "mdi:timer-sand" },
+      "distance_today": { "default": "mdi:map-marker-path" },
+      "jobs_today": { "default": "mdi:counter" },
+      "online_time_today": { "default": "mdi:access-point" }
     },
     "button": {
       "emergency_stop": { "default": "mdi:alert-octagon" },
@@ -29,14 +33,19 @@
     "number": {
       "blade_height": { "default": "mdi:arrow-expand-vertical" },
       "speed": { "default": "mdi:speedometer" },
-      "drive_speed": { "default": "mdi:gamepad-variant-outline" }
+      "drive_speed": { "default": "mdi:gamepad-variant-outline" },
+      "mow_angle": { "default": "mdi:angle-acute" },
+      "mow_border_laps": { "default": "mdi:vector-square" },
+      "mow_path_spacing": { "default": "mdi:arrow-expand-horizontal" }
     },
     "select": {
-      "area": { "default": "mdi:texture-box" }
+      "area": { "default": "mdi:texture-box" },
+      "mow_pattern": { "default": "mdi:texture" }
     },
     "switch": {
       "light": { "default": "mdi:lightbulb-outline", "state": { "on": "mdi:lightbulb-on" } },
-      "schedule": { "default": "mdi:calendar-blank", "state": { "on": "mdi:calendar-check" } }
+      "schedule": { "default": "mdi:calendar-blank", "state": { "on": "mdi:calendar-check" } },
+      "area": { "default": "mdi:texture-box" }
     },
     "device_tracker": {
       "position": { "default": "mdi:map-marker" }
@@ -53,6 +62,8 @@
     "start_mow": { "service": "mdi:play" },
     "emergency_stop": { "service": "mdi:alert-octagon" },
     "set_blade_height": { "service": "mdi:arrow-expand-vertical" },
-    "set_speed": { "service": "mdi:speedometer" }
+    "set_speed": { "service": "mdi:speedometer" },
+    "get_map": { "service": "mdi:map" },
+    "get_heatmap": { "service": "mdi:grid" }
   }
 }

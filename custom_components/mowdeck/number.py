@@ -1,4 +1,5 @@
-"""Numbers of a MowDeck mower: blade height, mowing speed and the manual-drive speed setting.
+"""Numbers of a MowDeck mower: blade height, mowing speed, the manual-drive speed setting and
+the angle, border laps and path spacing of the mowing defaults.
 
 Ranges come from the mower's capabilities, limited to what the Fleet command API accepts.
 Speeds are read, shown and sent with two decimals (``SPEED_DECIMALS``).
@@ -6,6 +7,7 @@ Speeds are read, shown and sent with two decimals (``SPEED_DECIMALS``).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.number import (
@@ -14,19 +16,31 @@ from homeassistant.components.number import (
     NumberEntityDescription,
     NumberMode,
 )
-from homeassistant.const import EntityCategory, Platform, UnitOfLength, UnitOfSpeed
+from homeassistant.const import (
+    DEGREE,
+    EntityCategory,
+    Platform,
+    UnitOfLength,
+    UnitOfSpeed,
+)
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    API_ANGLE_MAX_DEG,
     API_BLADE_HEIGHT_MAX_MM,
     API_BLADE_HEIGHT_MIN_MM,
+    API_BORDER_LAPS_MAX,
     API_DRIVE_SPEED_MAX_MPS,
+    API_SPACING_MAX_M,
+    API_SPACING_MIN_M,
     API_SPEED_MAX_MPS,
+    CAN_CONTROL,
     DEFAULT_MIN_SPEED_MPS,
     SPEED_DECIMALS,
     SPEED_STEP_MPS,
 )
 from .entity import MowDeckEntity, async_add_mower_entities
+from .select import async_save_mow_defaults, native_patterns
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -62,6 +76,13 @@ async def async_setup_entry(
         caps = coordinator.data.capabilities.get(mower_id) or {}
         if isinstance(caps.get("drive_speed_setting"), dict):
             numbers.append(DriveSpeedNumber(coordinator, mower_id))
+        if native_patterns(caps) and coordinator.permitted(mower_id, CAN_CONTROL):
+            numbers += [
+                MowDefaultsNumber(coordinator, mower_id, ANGLE),
+                MowDefaultsNumber(coordinator, mower_id, BORDER_LAPS),
+            ]
+            if _spacing_range(caps) is not None:
+                numbers.append(PathSpacingNumber(coordinator, mower_id))
         return numbers
 
     async_add_mower_entities(entry, async_add_entities, entities, domain=Platform.NUMBER)
@@ -210,3 +231,120 @@ class DriveSpeedNumber(MowDeckEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Send ``set_drive_speed`` with two decimals."""
         await self.async_send_command({"kind": "set_drive_speed", "speed_mps": _speed(value)})
+
+
+# Path spacing in centimetres, the unit people set it in; MowDeck stores metres.
+CM_PER_M = 100
+
+
+def _spacing_range(caps: dict[str, Any]) -> tuple[float, float] | None:
+    """The model's path spacing range in cm, within MowDeck's limits; None when not settable."""
+    bounds = caps.get("path_spacing_range_mm")
+    if not isinstance(bounds, list | tuple) or len(bounds) != 2:
+        return None
+    low = max(API_SPACING_MIN_M * CM_PER_M, float(bounds[0]) / 10)
+    high = min(API_SPACING_MAX_M * CM_PER_M, float(bounds[1]) / 10)
+    return (low, high) if low <= high else None
+
+
+@dataclass(frozen=True, kw_only=True)
+class MowDefaultsDescription(NumberEntityDescription):
+    """A number of the mowing defaults and its key in ``MowPattern``."""
+
+    field: str
+    integer: bool = False
+
+
+ANGLE = MowDefaultsDescription(
+    key="mow_angle",
+    field="angle_deg",
+    native_unit_of_measurement=DEGREE,
+    native_min_value=0,
+    native_max_value=API_ANGLE_MAX_DEG,
+    native_step=1,
+    mode=NumberMode.BOX,
+    entity_category=EntityCategory.CONFIG,
+)
+BORDER_LAPS = MowDefaultsDescription(
+    key="mow_border_laps",
+    field="border_laps",
+    native_min_value=0,
+    native_max_value=API_BORDER_LAPS_MAX,
+    native_step=1,
+    mode=NumberMode.BOX,
+    entity_category=EntityCategory.CONFIG,
+    integer=True,
+)
+
+
+class MowDefaultsNumber(MowDeckEntity, NumberEntity):
+    """The base angle or the border laps of the mower's mowing defaults
+    (``PUT .../mow-defaults``, ``mower.control``)."""
+
+    entity_description: MowDefaultsDescription
+
+    def __init__(
+        self, coordinator: MowDeckCoordinator, mower_id: str, description: MowDefaultsDescription
+    ) -> None:
+        """Create the number from its description."""
+        super().__init__(coordinator, mower_id, description.key)
+        self.entity_description = description
+
+    @property
+    def native_value(self) -> float | None:
+        """The saved value (MowDeck's default until defaults are saved)."""
+        value = self.coordinator.mow_pattern(self.mower_id).get(self.entity_description.field)
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            return None
+        return float(value)
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Save the value into the mowing defaults."""
+        saved: float | int = round(value) if self.entity_description.integer else float(value)
+        await async_save_mow_defaults(self, {self.entity_description.field: saved})
+
+
+class PathSpacingNumber(MowDeckEntity, NumberEntity):
+    """The distance between neighbouring paths of the mowing defaults in cm, within the
+    model's range (``path_spacing_range_mm``); unknown while the mower's own default applies."""
+
+    entity_description = NumberEntityDescription(
+        key="mow_path_spacing",
+        device_class=NumberDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.CENTIMETERS,
+        native_step=1,
+        mode=NumberMode.BOX,
+        entity_category=EntityCategory.CONFIG,
+    )
+
+    def __init__(self, coordinator: MowDeckCoordinator, mower_id: str) -> None:
+        """Create the number."""
+        super().__init__(coordinator, mower_id, "mow_path_spacing")
+
+    def _range(self) -> tuple[float, float]:
+        return _spacing_range(self.capabilities) or (
+            API_SPACING_MIN_M * CM_PER_M,
+            API_SPACING_MAX_M * CM_PER_M,
+        )
+
+    @property
+    def native_min_value(self) -> float:
+        """Smallest spacing of the model."""
+        return self._range()[0]
+
+    @property
+    def native_max_value(self) -> float:
+        """Largest spacing of the model."""
+        return self._range()[1]
+
+    @property
+    def native_value(self) -> float | None:
+        """The saved spacing in cm."""
+        value = self.coordinator.mow_pattern(self.mower_id).get("spacing_m")
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            return None
+        return round(float(value) * CM_PER_M, 1)
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Save the spacing (in metres) into the mowing defaults."""
+        await async_save_mow_defaults(self, {"spacing_m": round(value / CM_PER_M, 3)})

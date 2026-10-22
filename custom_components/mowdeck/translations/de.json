@@ -168,13 +168,33 @@
       },
       "drive_speed": {
         "name": "Geschwindigkeit beim manuellen Fahren"
+      },
+      "mow_angle": {
+        "name": "Mähwinkel"
+      },
+      "mow_border_laps": {
+        "name": "Randrunden"
+      },
+      "mow_path_spacing": {
+        "name": "Bahnabstand"
       }
     },
     "select": {
       "area": {
         "name": "Bereich",
         "state": {
-          "all": "Alle Bereiche"
+          "all": "Alle Bereiche",
+          "selection": "Mehrere Bereiche"
+        }
+      },
+      "mow_pattern": {
+        "name": "Mähmuster",
+        "state": {
+          "stripes": "Streifen",
+          "diagonal": "Diagonal",
+          "checkerboard": "Schachbrett",
+          "edge_only": "Nur Rand",
+          "random_angle": "Zufälliger Winkel"
         }
       }
     },
@@ -314,6 +334,18 @@
       },
       "lawn_wet_until": {
         "name": "Rasen nass bis"
+      },
+      "mowing_time_today": {
+        "name": "Mähzeit heute"
+      },
+      "distance_today": {
+        "name": "Strecke heute"
+      },
+      "jobs_today": {
+        "name": "Aufträge heute"
+      },
+      "online_time_today": {
+        "name": "Online-Zeit heute"
       }
     },
     "switch": {
@@ -322,6 +354,9 @@
       },
       "schedule": {
         "name": "Zeitplan {schedule}"
+      },
+      "area": {
+        "name": "{area} mähen"
       }
     },
     "update": {
@@ -417,6 +452,12 @@
     },
     "action_forbidden": {
       "message": "Das API-Token darf {command} nicht ausführen. Gib dem Token in der MowDeck-App die Berechtigung {permission}."
+    },
+    "no_area_selected": {
+      "message": "Kein Bereich ausgewählt. Schalte mindestens einen Bereichsschalter ein oder wähle einen Bereich."
+    },
+    "no_map": {
+      "message": "MowDeck hat noch keine Karte dieses Mähroboters."
     }
   },
   "issues": {
@@ -469,6 +510,32 @@
         "mps": {
           "name": "Geschwindigkeit",
           "description": "Geschwindigkeit in Metern pro Sekunde."
+        }
+      }
+    },
+    "get_map": {
+      "name": "Karte abrufen",
+      "description": "Liefert die aktuelle Karte des Mähroboters (Bereiche mit den Namen aus MowDeck, Wege, Sperrzonen, Ladestation) im lokalen Koordinatensystem ihres Georeferenzpunkts."
+    },
+    "get_heatmap": {
+      "name": "Heatmap abrufen",
+      "description": "Liefert eine Heatmap-Ebene des Mähroboters über seiner Karte: Abdeckung mit verpassten Stellen, RTK-Fix-Anteil oder WLAN- bzw. Mobilfunksignal.",
+      "fields": {
+        "layer": {
+          "name": "Ebene",
+          "description": "coverage, rtk, wifi oder mnet (Mobilfunk)."
+        },
+        "start": {
+          "name": "Beginn",
+          "description": "Beginn des Zeitraums. Standard: vor 7 Tagen."
+        },
+        "end": {
+          "name": "Ende",
+          "description": "Ende des Zeitraums. Standard: jetzt."
+        },
+        "cell": {
+          "name": "Zellgröße",
+          "description": "Zellgröße in Metern: 0,5, 1 oder 2."
         }
       }
     }

@@ -24,9 +24,9 @@ from homeassistant.util import dt as dt_util
 
 from .api import MowDeckAuthError, MowDeckClient, MowDeckError, MowDeckForbiddenError
 from .const import (
-    ALL_AREAS,
     AREA_FALLBACK,
     CONF_POLL_INTERVAL,
+    DEFAULT_PATTERN,
     DEFAULT_POLL_INTERVAL,
     DOMAIN,
     ISSUE_FORBIDDEN,
@@ -97,8 +97,9 @@ class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
         )
         self.client = client
         self.realtime_connected = False
-        # Area chosen in each mower's select entity (ALL_AREAS when none is chosen).
-        self.selected_area: dict[str, str] = {}
+        # Areas the next start mows per mower, in any order; None (or missing) means every
+        # area of the map. The area select and the area switches both edit it.
+        self.area_selection: dict[str, list[str] | None] = {}
         self._static_fetched_at: dict[str, datetime] = {}
         self.data = MowDeckData()
 
@@ -290,12 +291,56 @@ class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
         ]
 
     def area_ids_to_mow(self, mower_id: str) -> list[str]:
-        """The selected area, or every area of the map when none is selected."""
-        selected = self.selected_area.get(mower_id, ALL_AREAS)
+        """The selected areas in map order (every area while all are selected); empty when the
+        switches deselected every area."""
         all_ids = [str(area["id"]) for area in self.areas(mower_id)]
-        if selected != ALL_AREAS and selected in all_ids:
-            return [selected]
-        return all_ids
+        selection = self.area_selection.get(mower_id)
+        if selection is None:
+            return all_ids
+        return [area_id for area_id in all_ids if area_id in selection]
+
+    def area_selected(self, mower_id: str, area_id: str) -> bool:
+        """The area is part of the next start."""
+        selection = self.area_selection.get(mower_id)
+        return selection is None or area_id in selection
+
+    @callback
+    def async_select_areas(self, mower_id: str, area_ids: list[str] | None) -> None:
+        """Set the areas of the next start (None: every area) and update the entities."""
+        all_ids = [str(area["id"]) for area in self.areas(mower_id)]
+        if area_ids is not None and all_ids and set(all_ids) <= set(area_ids):
+            area_ids = None
+        self.area_selection[mower_id] = list(area_ids) if area_ids is not None else None
+        self.async_update_listeners()
+
+    @callback
+    def async_toggle_area(self, mower_id: str, area_id: str, selected: bool) -> None:
+        """Add an area to the next start or take it out."""
+        current = self.area_selection.get(mower_id)
+        chosen = [str(area["id"]) for area in self.areas(mower_id)] if current is None else current
+        chosen = [a for a in chosen if a != area_id] + ([area_id] if selected else [])
+        self.async_select_areas(mower_id, chosen)
+
+    def mow_pattern(self, mower_id: str) -> dict[str, Any]:
+        """The mower's mowing defaults (``MowerOut.mow_defaults.pattern``), else MowDeck's."""
+        defaults = (self.data.mowers.get(mower_id) or {}).get("mow_defaults")
+        pattern = defaults.get("pattern") if isinstance(defaults, dict) else None
+        return (
+            {**DEFAULT_PATTERN, **pattern} if isinstance(pattern, dict) else dict(DEFAULT_PATTERN)
+        )
+
+    def has_mow_defaults(self, mower_id: str) -> bool:
+        """The mower has saved mowing defaults."""
+        defaults = (self.data.mowers.get(mower_id) or {}).get("mow_defaults")
+        return isinstance(defaults, dict) and isinstance(defaults.get("pattern"), dict)
+
+    @callback
+    def async_set_mower(self, mower: dict[str, Any]) -> None:
+        """A mower as Fleet answered an action (``MowerOut``)."""
+        mower_id = str(mower.get("id"))
+        if mower_id in self.data.mowers:
+            self.data.mowers[mower_id] = mower
+            self.async_update_listeners()
 
 
 class MowDeckServiceCoordinator[T](DataUpdateCoordinator[T]):

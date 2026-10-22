@@ -206,7 +206,7 @@ async def test_area_select_shows_mowdeck_names(
     await hass.async_block_till_done()
     state = hass.states.get("select.luba_area")
     assert state is not None
-    assert state.attributes["options"] == ["all", "Vorgarten", "Area 2", "Area 3"]
+    assert state.attributes["options"] == ["all", "Vorgarten", "Area 2", "Area 3", "selection"]
     await call(hass, "select", SERVICE_SELECT_OPTION, "select.luba_area", **{ATTR_OPTION: "Area 3"})
     await call(hass, "lawn_mower", SERVICE_START_MOWING, MOWER)
     assert sent(fake_api) == [{"kind": "start_mow", "area_ids": ["zone-back"]}]
@@ -217,7 +217,7 @@ async def test_area_select_shows_mowdeck_names(
     await hass.async_block_till_done()
     state = hass.states.get("select.luba_area")
     assert state is not None
-    assert state.attributes["options"] == ["all", "Front", "Bereich 2", "Bereich 3"]
+    assert state.attributes["options"] == ["all", "Front", "Bereich 2", "Bereich 3", "selection"]
     # The selection follows the area id, not the label.
     assert state.state == "Bereich 3"
 

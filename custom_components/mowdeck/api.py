@@ -354,6 +354,16 @@ class MowDeckClient:
         ``FirmwareInfo``. 409 when the connection cannot ask, 503 when the mower is offline."""
         return dict(await self._request("POST", f"{FLEET}/mowers/{mower_id}/firmware/check"))
 
+    async def set_mow_defaults(
+        self, mower_id: str, pattern: Mapping[str, Any] | None
+    ) -> dict[str, Any]:
+        """``PUT /fleet/mowers/{id}/mow-defaults`` (``can_control``): the mowing defaults every
+        client starts with; ``None`` drops them. Answers the mower (``MowerOut``)."""
+        body = {"pattern": dict(pattern) if pattern is not None else None}
+        return dict(
+            await self._request("PUT", f"{FLEET}/mowers/{mower_id}/mow-defaults", json=body)
+        )
+
     async def get_command(self, command_id: str) -> dict[str, Any]:
         """``GET /fleet/commands/{id}``: the command record with its status."""
         return dict(await self._request("GET", f"{FLEET}/commands/{command_id}"))
@@ -537,6 +547,40 @@ class MowDeckClient:
         params = {k: settings[k] for k in keys if settings and settings.get(k) is not None}
         query = f"?{urlencode(params)}" if params else ""
         return dict(await self._request("GET", f"{SCHEDULER}/weather/{mower_id}{query}"))
+
+    # Telemetry history
+
+    async def get_health_daily(self, mower_id: str, day: str) -> dict[str, Any] | None:
+        """``GET /telemetry/mowers/{id}/health/daily`` for one UTC day (``YYYY-MM-DD``): the
+        day's totals, None when nothing was recorded."""
+        query = urlencode({"from": day, "to": day})
+        try:
+            body = await self._request("GET", f"{TELEMETRY}/mowers/{mower_id}/health/daily?{query}")
+        except MowDeckNotFoundError:
+            return None
+        days = [d for d in body.get("days", []) if isinstance(d, dict) and d.get("day") == day]
+        return dict(days[0]) if days else None
+
+    async def get_heatmap(
+        self,
+        mower_id: str,
+        layer: str,
+        *,
+        start: str | None = None,
+        end: str | None = None,
+        cell: float | None = None,
+    ) -> dict[str, Any]:
+        """``GET /telemetry/mowers/{id}/heatmap``: a raster layer (``coverage``, ``rtk``,
+        ``wifi``, ``mnet``) over the map frame; default range the last 7 days."""
+        params: dict[str, Any] = {"layer": layer}
+        if start:
+            params["from"] = start
+        if end:
+            params["to"] = end
+        if cell is not None:
+            params["cell"] = cell
+        query = urlencode(params)
+        return dict(await self._request("GET", f"{TELEMETRY}/mowers/{mower_id}/heatmap?{query}"))
 
 
 class _RetryableStatusError(Exception):
