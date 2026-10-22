@@ -1,10 +1,11 @@
-"""Sensors of a MowDeck mower: values of the Telemetry ``MowerState``, health totals and the
-Scheduler (next start, last schedule run, rain pause, wet lawn)."""
+"""Sensors of a MowDeck mower: values of the Telemetry ``MowerState`` (only its typed fields,
+never the adapter extras in ``raw``), health totals and the Scheduler (next start, last
+schedule run, rain pause, wet lawn)."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +20,7 @@ from homeassistant.const import (
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     EntityCategory,
     Platform,
+    UnitOfArea,
     UnitOfLength,
     UnitOfSpeed,
     UnitOfTime,
@@ -26,7 +28,14 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .const import RUN_OUTCOMES, SPEED_DECIMALS
+from .const import (
+    ERROR_CATEGORIES,
+    GNSS_SOLUTIONS,
+    NETWORK_KINDS,
+    RUN_OUTCOMES,
+    SELF_CHECK_RESULTS,
+    SPEED_DECIMALS,
+)
 from .entity import MowDeckEntity, async_add_mower_entities
 from .scheduler import parse_time
 
@@ -61,11 +70,14 @@ BLE_BRIDGE = "ble_bridge"
 
 @dataclass(frozen=True, slots=True)
 class MowerData:
-    """What a sensor reads: the newest state and the health totals of one mower."""
+    """What a sensor reads: the newest state, the health totals and the area names of one
+    mower."""
 
     state: dict[str, Any]
     health: dict[str, Any]
     today: dict[str, Any]
+    # Map area id -> the name MowDeck shows for it.
+    areas: dict[str, str] = field(default_factory=dict)
 
 
 def _enum(options: list[str], key: str) -> Callable[[MowerData], str | None]:
@@ -93,6 +105,45 @@ def _number(
         return round(float(value), decimals)
 
     return read
+
+
+def _part(key: str, name: str) -> Callable[[MowerData], Any]:
+    """A field of a typed part of the state (``job``, ``gnss``, ``signal``, ``self_check``);
+    None while the part is null (no job runs, or the connection does not report it)."""
+
+    def read(data: MowerData) -> Any:
+        part = data.state.get(key)
+        return part.get(name) if isinstance(part, dict) else None
+
+    return read
+
+
+def _part_enum(key: str, name: str, options: list[str]) -> Callable[[MowerData], str | None]:
+    """An enum field of a typed part; values outside ``options`` are unknown."""
+    source = _part(key, name)
+
+    def read(data: MowerData) -> str | None:
+        value = source(data)
+        return value if value in options else None
+
+    return read
+
+
+def _job_area(data: MowerData) -> str | None:
+    """The name of the map area the running job works in, as MowDeck shows it (the id when
+    the area is not on the map Home Assistant knows); None when the job names no area."""
+    area_id = _part("job", "area_id")(data)
+    if not area_id:
+        return None
+    return data.areas.get(str(area_id), str(area_id))
+
+
+def _error_category(data: MowerData) -> str | None:
+    """The manufacturer-neutral kind of the fault; only while the mower is in error."""
+    if data.state.get("activity") != "error":
+        return None
+    value = data.state.get("error_category")
+    return value if value in ERROR_CATEGORIES else None
 
 
 def _timestamp(data: MowerData) -> datetime | None:
@@ -169,6 +220,7 @@ class MowDeckSensorDescription(SensorEntityDescription):
 
     value_fn: Callable[[MowerData], Any]
     exists_fn: Callable[[dict[str, Any]], bool] = lambda caps: True
+    attributes_fn: Callable[[MowerData], dict[str, Any]] | None = None
     # Read from the health coordinator (unavailable while the health totals fail).
     health: bool = False
 
@@ -247,6 +299,109 @@ SENSORS: tuple[MowDeckSensorDescription, ...] = (
         entity_registry_enabled_default=False,
         value_fn=_number(_bridge_rssi),
         exists_fn=_has_ble_bridge,
+    ),
+    # The running job (MowerState.job, null while none runs); the vendor reports the times in
+    # whole minutes.
+    MowDeckSensorDescription(
+        key="job_progress",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_number(_part("job", "progress_percent")),
+    ),
+    MowDeckSensorDescription(
+        key="job_area",
+        value_fn=_job_area,
+        attributes_fn=lambda d: {"area_id": _part("job", "area_id")(d)},
+    ),
+    MowDeckSensorDescription(
+        key="job_elapsed",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        suggested_unit_of_measurement=UnitOfTime.MINUTES,
+        suggested_display_precision=0,
+        value_fn=_number(_part("job", "elapsed_s")),
+    ),
+    MowDeckSensorDescription(
+        key="job_remaining",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        suggested_unit_of_measurement=UnitOfTime.MINUTES,
+        suggested_display_precision=0,
+        value_fn=_number(_part("job", "remaining_s")),
+    ),
+    MowDeckSensorDescription(
+        key="job_mowed_area",
+        device_class=SensorDeviceClass.AREA,
+        native_unit_of_measurement=UnitOfArea.SQUARE_METERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=_number(_part("job", "mowed_m2"), 1),
+    ),
+    # Satellite positioning (MowerState.gnss). Satellites and correction age change with
+    # nearly every state, so they are disabled by default.
+    MowDeckSensorDescription(
+        key="gnss_satellites",
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=_number(_part("gnss", "satellites")),
+    ),
+    MowDeckSensorDescription(
+        key="rtk_correction_age",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=_number(_part("gnss", "correction_age_s"), 1),
+    ),
+    MowDeckSensorDescription(
+        key="rtk_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=GNSS_SOLUTIONS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=_part_enum("gnss", "rtk_status", GNSS_SOLUTIONS),
+    ),
+    # The mower's own radio and uplink (MowerState.signal); the dBm values are chatty.
+    MowDeckSensorDescription(
+        key="wifi_signal",
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+        native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=_number(_part("signal", "wifi_dbm")),
+    ),
+    MowDeckSensorDescription(
+        key="mobile_signal",
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+        native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=_number(_part("signal", "mobile_dbm")),
+    ),
+    MowDeckSensorDescription(
+        key="network",
+        device_class=SensorDeviceClass.ENUM,
+        options=NETWORK_KINDS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=_part_enum("signal", "network", NETWORK_KINDS),
+    ),
+    # The start self-check (MowerState.self_check): ok, or blocked with a reason key.
+    MowDeckSensorDescription(
+        key="self_check",
+        device_class=SensorDeviceClass.ENUM,
+        options=SELF_CHECK_RESULTS,
+        value_fn=_part_enum("self_check", "result", SELF_CHECK_RESULTS),
+        attributes_fn=lambda d: {"detail": _part("self_check", "detail")(d)},
+    ),
+    MowDeckSensorDescription(
+        key="error_category",
+        device_class=SensorDeviceClass.ENUM,
+        options=ERROR_CATEGORIES,
+        value_fn=_error_category,
     ),
     # Health totals of Telemetry (GET /telemetry/mowers/{id}/health) from the health
     # coordinator (HEALTH_REFRESH).
@@ -384,17 +539,20 @@ class MowDeckSensor(MowDeckEntity, SensorEntity):
     def native_value(self) -> Any:
         """The value read from the newest state, the health totals or today's totals (zero
         while the mower has health totals but nothing was recorded today)."""
+        return self.entity_description.value_fn(self._data())
+
+    def _data(self) -> MowerData:
         today = self._health.data.today.get(self.mower_id) if self._health else None
-        data = MowerData(self.mower_state, self._totals(), today or {})
-        return self.entity_description.value_fn(data)
+        areas = dict(self.coordinator.area_labels(self.mower_id))
+        return MowerData(self.mower_state, self._totals(), today or {}, areas)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Battery cycles: their source and MowDeck's own count. Blade hours: the reminder
-        threshold and the last recorded blade change. Next to the error code: its
-        message, category and source, and whether driving the mower may free it. Category and
-        source are adapter extras (``raw``), so they are only shown while an error code is set
-        and may be missing for other manufacturers."""
+        threshold and the last recorded blade change. Next to the error code: its message and
+        category, and whether driving the mower may free it. Others as their description says."""
+        if self.entity_description.attributes_fn is not None:
+            return self.entity_description.attributes_fn(self._data())
         if self.entity_description.key == "battery_cycles":
             health = self._totals()
             return _battery_cycle_attributes(health) if health else None
@@ -404,12 +562,9 @@ class MowDeckSensor(MowDeckEntity, SensorEntity):
         if self.entity_description.key != "error_code":
             return None
         state = self.mower_state
-        raw = state.get("raw")
-        extras = raw if isinstance(raw, dict) and state.get("error_code") else {}
         return {
             "error_message": state.get("error_message"),
-            "error_category": extras.get("error_category"),
-            "error_source": extras.get("error_source"),
+            "error_category": _error_category(self._data()),
             "drive_recoverable": bool(state.get("drive_recoverable", False)),
         }
 

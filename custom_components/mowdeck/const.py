@@ -131,6 +131,24 @@ RUN_OUTCOMES: Final = [
     "skipped_manual",
     "failed",
 ]
+# Typed parts of MowerState (apps/web/openapi/telemetry.json): GnssSolution, NetworkKind,
+# SelfCheckResult and MowerErrorCategory; "unknown" becomes the unknown state.
+GNSS_SOLUTIONS: Final = ["none", "single", "float", "fixed"]
+NETWORK_KINDS: Final = ["wifi", "mobile", "ble", "none"]
+SELF_CHECK_RESULTS: Final = ["ok", "blocked"]
+ERROR_CATEGORIES: Final = [
+    "trapped",
+    "obstacle",
+    "outside",
+    "wheel_slip",
+    "lift_tilt",
+    "collision",
+    "battery",
+    "blade_motor",
+    "rain",
+    "positioning",
+    "other",
+]
 # Verdicts of the rain decision (RainDecisionOut.verdict).
 RAIN_VERDICTS: Final = ["run", "hold", "unknown_run", "unknown_hold", "no_location", "disabled"]
 RELATION_PERMISSION: Final = {

@@ -271,9 +271,6 @@
               "other": "Other"
             }
           },
-          "error_source": {
-            "name": "Error source"
-          },
           "drive_recoverable": {
             "name": "Recoverable by driving"
           }
@@ -281,6 +278,84 @@
       },
       "bridge_signal": {
         "name": "Bluetooth bridge signal"
+      },
+      "job_progress": {
+        "name": "Job progress"
+      },
+      "job_area": {
+        "name": "Current area",
+        "state_attributes": {
+          "area_id": {
+            "name": "Area ID"
+          }
+        }
+      },
+      "job_elapsed": {
+        "name": "Job time elapsed"
+      },
+      "job_remaining": {
+        "name": "Job time remaining"
+      },
+      "job_mowed_area": {
+        "name": "Mowed area"
+      },
+      "gnss_satellites": {
+        "name": "Satellites"
+      },
+      "rtk_correction_age": {
+        "name": "RTK correction age"
+      },
+      "rtk_status": {
+        "name": "RTK status",
+        "state": {
+          "none": "No position",
+          "single": "Single (no corrections)",
+          "float": "Float",
+          "fixed": "Fixed"
+        }
+      },
+      "wifi_signal": {
+        "name": "Wi-Fi signal"
+      },
+      "mobile_signal": {
+        "name": "Mobile signal"
+      },
+      "network": {
+        "name": "Network",
+        "state": {
+          "wifi": "Wi-Fi",
+          "mobile": "Mobile network",
+          "ble": "Bluetooth",
+          "none": "None"
+        }
+      },
+      "self_check": {
+        "name": "Self-check",
+        "state": {
+          "ok": "OK",
+          "blocked": "Blocked"
+        },
+        "state_attributes": {
+          "detail": {
+            "name": "Reason"
+          }
+        }
+      },
+      "error_category": {
+        "name": "Error category",
+        "state": {
+          "trapped": "Trapped",
+          "obstacle": "Obstacle",
+          "outside": "Outside the work area",
+          "wheel_slip": "Wheel slip",
+          "lift_tilt": "Lifted or tilted",
+          "collision": "Collision",
+          "battery": "Battery",
+          "blade_motor": "Blade or motor",
+          "rain": "Rain",
+          "positioning": "Positioning",
+          "other": "Other"
+        }
       },
       "blade_hours": {
         "name": "Blade hours since change",

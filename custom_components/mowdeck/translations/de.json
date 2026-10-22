@@ -271,9 +271,6 @@
               "other": "Sonstiges"
             }
           },
-          "error_source": {
-            "name": "Fehlerquelle"
-          },
           "drive_recoverable": {
             "name": "Durch Fahren lösbar"
           }
@@ -281,6 +278,84 @@
       },
       "bridge_signal": {
         "name": "Signal der Bluetooth-Bridge"
+      },
+      "job_progress": {
+        "name": "Mähfortschritt"
+      },
+      "job_area": {
+        "name": "Aktueller Bereich",
+        "state_attributes": {
+          "area_id": {
+            "name": "Bereichs-ID"
+          }
+        }
+      },
+      "job_elapsed": {
+        "name": "Mähdauer bisher"
+      },
+      "job_remaining": {
+        "name": "Restdauer"
+      },
+      "job_mowed_area": {
+        "name": "Gemähte Fläche"
+      },
+      "gnss_satellites": {
+        "name": "Satelliten"
+      },
+      "rtk_correction_age": {
+        "name": "Alter der RTK-Korrektur"
+      },
+      "rtk_status": {
+        "name": "RTK-Status",
+        "state": {
+          "none": "Keine Position",
+          "single": "Single (ohne Korrektur)",
+          "float": "Float",
+          "fixed": "Fixed"
+        }
+      },
+      "wifi_signal": {
+        "name": "WLAN-Signal"
+      },
+      "mobile_signal": {
+        "name": "Mobilfunksignal"
+      },
+      "network": {
+        "name": "Netzwerk",
+        "state": {
+          "wifi": "WLAN",
+          "mobile": "Mobilfunk",
+          "ble": "Bluetooth",
+          "none": "Keines"
+        }
+      },
+      "self_check": {
+        "name": "Selbsttest",
+        "state": {
+          "ok": "OK",
+          "blocked": "Blockiert"
+        },
+        "state_attributes": {
+          "detail": {
+            "name": "Grund"
+          }
+        }
+      },
+      "error_category": {
+        "name": "Fehlerkategorie",
+        "state": {
+          "trapped": "Festgefahren",
+          "obstacle": "Hindernis",
+          "outside": "Außerhalb des Arbeitsbereichs",
+          "wheel_slip": "Radschlupf",
+          "lift_tilt": "Angehoben oder gekippt",
+          "collision": "Kollision",
+          "battery": "Akku",
+          "blade_motor": "Messer oder Motor",
+          "rain": "Regen",
+          "positioning": "Positionierung",
+          "other": "Sonstiges"
+        }
       },
       "blade_hours": {
         "name": "Messerstunden seit Wechsel",

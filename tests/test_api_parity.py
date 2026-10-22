@@ -16,7 +16,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.mowdeck.const import DOMAIN
 
 from .conftest import wait_for
-from .fake_mowdeck import MOWER_ID, FakeMowDeck, mower_state
+from .fake_mowdeck import MOWER_ID, MOWER_STATE_FIELDS, FakeMowDeck, mower_state
 
 MOWER = "lawn_mower.luba"
 FIRMWARE = "update.luba_firmware"
@@ -252,9 +252,16 @@ async def test_blade_hours_from_the_device_counter(
     assert state_of(hass, "sensor.luba_mowing_hours").state == "unknown"
 
 
+def test_fake_state_has_every_contract_field() -> None:
+    """The fake's MowerState carries exactly the fields of MowDeck's contract."""
+    assert set(mower_state()) == MOWER_STATE_FIELDS
+
+
 @pytest.mark.usefixtures("loaded_entry")
-async def test_error_category_attributes(hass: HomeAssistant, fake_api: FakeMowDeck) -> None:
-    """Error code with message, category, source and drive_recoverable."""
+async def test_error_category(hass: HomeAssistant, fake_api: FakeMowDeck) -> None:
+    """Error code with message, the typed category and drive_recoverable; the category sensor
+    shows it only while the mower is in error. Adapter extras in raw are never read."""
+    assert state_of(hass, "sensor.luba_error_category").state == "unknown"
     await fake_api.push_state(
         MOWER_ID,
         mower_state(
@@ -262,23 +269,150 @@ async def test_error_category_attributes(hass: HomeAssistant, fake_api: FakeMowD
             charging=False,
             error_code="1201",
             error_message="The robot is stuck",
+            error_category="trapped",
             drive_recoverable=True,
-            raw={"error_category": "trapped", "error_source": "error_log"},
+            raw={"error_category": "collision", "error_source": "error_log"},
         ),
     )
     await wait_for(hass, lambda: state_of(hass, "sensor.luba_error_code").state == "1201")
     attributes = state_of(hass, "sensor.luba_error_code").attributes
     assert attributes["error_message"] == "The robot is stuck"
     assert attributes["error_category"] == "trapped"
-    assert attributes["error_source"] == "error_log"
+    assert "error_source" not in attributes
     assert attributes["drive_recoverable"] is True
+    category = state_of(hass, "sensor.luba_error_category")
+    assert category.state == "trapped"
+    assert category.attributes["options"][0] == "trapped"
 
-    # A cleared error drops the category even when raw still carries it.
-    await fake_api.push_state(MOWER_ID, mower_state(raw={"error_category": "trapped"}))
+    # A cleared error drops the category even when the state still carries one.
+    await fake_api.push_state(MOWER_ID, mower_state(error_category="trapped"))
     await wait_for(hass, lambda: state_of(hass, "sensor.luba_error_code").state == "unknown")
     attributes = state_of(hass, "sensor.luba_error_code").attributes
     assert attributes["error_category"] is None
     assert attributes["drive_recoverable"] is False
+    assert state_of(hass, "sensor.luba_error_category").state == "unknown"
+
+    # An unknown category of a newer MowDeck is unknown, not an invalid enum state.
+    await fake_api.push_state(
+        MOWER_ID, mower_state(activity="error", error_code="9", error_category="meteor")
+    )
+    await wait_for(hass, lambda: state_of(hass, "sensor.luba_error_code").state == "9")
+    assert state_of(hass, "sensor.luba_error_category").state == "unknown"
+
+
+@pytest.mark.usefixtures("loaded_entry")
+async def test_job_sensors(hass: HomeAssistant, fake_api: FakeMowDeck) -> None:
+    """Progress, current area (by its MowDeck name), elapsed and remaining time and the mowed
+    area of the running job; unknown while no job runs."""
+    for entity_id in (
+        "sensor.luba_job_progress",
+        "sensor.luba_current_area",
+        "sensor.luba_job_time_elapsed",
+        "sensor.luba_job_time_remaining",
+        "sensor.luba_mowed_area",
+    ):
+        assert state_of(hass, entity_id).state == "unknown", entity_id
+
+    job = {
+        "progress_percent": 42,
+        "area_id": "zone-back",
+        "elapsed_s": 1260,
+        "remaining_s": 1800,
+        "mowed_m2": 123.456,
+    }
+    await fake_api.push_state(MOWER_ID, mower_state(activity="mowing", charging=False, job=job))
+    await wait_for(hass, lambda: state_of(hass, "sensor.luba_job_progress").state == "42")
+    assert state_of(hass, "sensor.luba_job_progress").attributes["unit_of_measurement"] == "%"
+    area = state_of(hass, "sensor.luba_current_area")
+    assert area.state == "Back"
+    assert area.attributes["area_id"] == "zone-back"
+    elapsed = state_of(hass, "sensor.luba_job_time_elapsed")
+    assert elapsed.attributes["unit_of_measurement"] == "min"
+    assert float(elapsed.state) == 21
+    assert float(state_of(hass, "sensor.luba_job_time_remaining").state) == 30
+    mowed = state_of(hass, "sensor.luba_mowed_area")
+    assert mowed.attributes["unit_of_measurement"] == "m²"
+    assert float(mowed.state) == pytest.approx(123.5)
+
+    # An area that is not on the known map shows its id; no area and no job are unknown.
+    job = {**job, "area_id": "zone-new", "progress_percent": None}
+    await fake_api.push_state(MOWER_ID, mower_state(activity="mowing", job=job))
+    await wait_for(hass, lambda: state_of(hass, "sensor.luba_current_area").state == "zone-new")
+    assert state_of(hass, "sensor.luba_job_progress").state == "unknown"
+    await fake_api.push_state(
+        MOWER_ID, mower_state(activity="mowing", job={**job, "area_id": None})
+    )
+    await wait_for(hass, lambda: state_of(hass, "sensor.luba_current_area").state == "unknown")
+    await fake_api.push_state(MOWER_ID, mower_state())
+    await wait_for(hass, lambda: state_of(hass, "sensor.luba_mowed_area").state == "unknown")
+
+
+async def test_gnss_and_signal_sensors(
+    hass: HomeAssistant,
+    fake_api: FakeMowDeck,
+    loaded_entry: MockConfigEntry,
+    entity_registry: er.EntityRegistry,
+) -> None:
+    """RTK status and network are on; satellites, correction age and the dBm values are
+    diagnostic and disabled by default (they change with nearly every state)."""
+    assert state_of(hass, "sensor.luba_rtk_status").state == "fixed"
+    assert state_of(hass, "sensor.luba_network").state == "wifi"
+    for entity_id in (
+        "sensor.luba_satellites",
+        "sensor.luba_rtk_correction_age",
+        "sensor.luba_wi_fi_signal",
+        "sensor.luba_mobile_signal",
+    ):
+        entry = entity_registry.async_get(entity_id)
+        assert entry is not None, entity_id
+        assert entry.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        assert entry.entity_category is not None
+        entity_registry.async_update_entity(entity_id, disabled_by=None)
+    subscriptions = len(fake_api.ws_subscriptions)
+    await hass.config_entries.async_reload(loaded_entry.entry_id)
+    await hass.async_block_till_done()
+    await wait_for(hass, lambda: hass.states.get("sensor.luba_satellites") is not None)
+    await wait_for(hass, lambda: state_of(hass, "sensor.luba_satellites").state == "28")
+    assert float(state_of(hass, "sensor.luba_rtk_correction_age").state) == 1.0
+    assert state_of(hass, "sensor.luba_wi_fi_signal").state == "-58"
+    assert state_of(hass, "sensor.luba_mobile_signal").state == "unknown"
+
+    await wait_for(hass, lambda: len(fake_api.ws_subscriptions) > subscriptions)
+    await fake_api.push_state(
+        MOWER_ID,
+        mower_state(
+            gnss={"satellites": 9, "correction_age_s": 12.34, "rtk_status": "single"},
+            signal={"wifi_dbm": None, "mobile_dbm": -91, "network": "mobile"},
+        ),
+    )
+    await wait_for(hass, lambda: state_of(hass, "sensor.luba_rtk_status").state == "single")
+    assert state_of(hass, "sensor.luba_network").state == "mobile"
+    assert state_of(hass, "sensor.luba_satellites").state == "9"
+    assert float(state_of(hass, "sensor.luba_rtk_correction_age").state) == 12.3
+    assert state_of(hass, "sensor.luba_mobile_signal").state == "-91"
+    assert state_of(hass, "sensor.luba_wi_fi_signal").state == "unknown"
+
+    # A connection that reports neither: unknown everywhere; "unknown" is no enum state.
+    await fake_api.push_state(MOWER_ID, mower_state(gnss={"rtk_status": "unknown"}, signal=None))
+    await wait_for(hass, lambda: state_of(hass, "sensor.luba_rtk_status").state == "unknown")
+    assert state_of(hass, "sensor.luba_network").state == "unknown"
+    assert state_of(hass, "sensor.luba_satellites").state == "unknown"
+
+
+@pytest.mark.usefixtures("loaded_entry")
+async def test_self_check(hass: HomeAssistant, fake_api: FakeMowDeck) -> None:
+    """The start self-check: ok, or blocked with the reason as attribute."""
+    check = state_of(hass, "sensor.luba_self_check")
+    assert check.state == "ok"
+    assert check.attributes["detail"] is None
+    await fake_api.push_state(
+        MOWER_ID, mower_state(self_check={"result": "blocked", "detail": "rtk_not_ready"})
+    )
+    await wait_for(hass, lambda: state_of(hass, "sensor.luba_self_check").state == "blocked")
+    assert state_of(hass, "sensor.luba_self_check").attributes["detail"] == "rtk_not_ready"
+    await fake_api.push_state(MOWER_ID, mower_state(self_check=None))
+    await wait_for(hass, lambda: state_of(hass, "sensor.luba_self_check").state == "unknown")
+    assert state_of(hass, "sensor.luba_self_check").attributes["detail"] is None
 
 
 @pytest.mark.usefixtures("loaded_entry")
