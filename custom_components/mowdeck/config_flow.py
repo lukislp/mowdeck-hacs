@@ -21,6 +21,9 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -37,12 +40,16 @@ from .api import (
 from .const import (
     CONF_API_TOKEN,
     CONF_EXPOSE_EMERGENCY_STOP,
+    CONF_PERSISTENT_SEVERITY,
     CONF_POLL_INTERVAL,
     DEFAULT_EXPOSE_EMERGENCY_STOP,
+    DEFAULT_PERSISTENT_SEVERITY,
     DEFAULT_POLL_INTERVAL,
     DOMAIN,
     MAX_POLL_INTERVAL,
     MIN_POLL_INTERVAL,
+    PERSISTENT_OFF,
+    SEVERITIES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -201,7 +208,7 @@ class MowDeckConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class MowDeckOptionsFlow(OptionsFlowWithReload):
-    """Poll interval and whether to expose the emergency stop button."""
+    """Poll interval, the emergency stop button and persistent notifications."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Show and store the options (the entry reloads afterwards)."""
@@ -210,6 +217,9 @@ class MowDeckOptionsFlow(OptionsFlowWithReload):
                 data={
                     CONF_POLL_INTERVAL: int(user_input[CONF_POLL_INTERVAL]),
                     CONF_EXPOSE_EMERGENCY_STOP: bool(user_input[CONF_EXPOSE_EMERGENCY_STOP]),
+                    CONF_PERSISTENT_SEVERITY: str(
+                        user_input.get(CONF_PERSISTENT_SEVERITY, DEFAULT_PERSISTENT_SEVERITY)
+                    ),
                 }
             )
         options = self.config_entry.options
@@ -231,6 +241,16 @@ class MowDeckOptionsFlow(OptionsFlowWithReload):
                     CONF_EXPOSE_EMERGENCY_STOP,
                     default=options.get(CONF_EXPOSE_EMERGENCY_STOP, DEFAULT_EXPOSE_EMERGENCY_STOP),
                 ): bool,
+                vol.Required(
+                    CONF_PERSISTENT_SEVERITY,
+                    default=options.get(CONF_PERSISTENT_SEVERITY, DEFAULT_PERSISTENT_SEVERITY),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[PERSISTENT_OFF, *reversed(SEVERITIES)],
+                        mode=SelectSelectorMode.DROPDOWN,
+                        translation_key=CONF_PERSISTENT_SEVERITY,
+                    )
+                ),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

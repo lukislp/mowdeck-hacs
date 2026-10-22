@@ -54,11 +54,13 @@
         "title": "MowDeck-Optionen",
         "data": {
           "poll_interval": "Abfrageintervall",
-          "expose_emergency_stop": "Not-Aus-Taste anzeigen"
+          "expose_emergency_stop": "Not-Aus-Taste anzeigen",
+          "persistent_notifications": "Dauerhafte Benachrichtigungen"
         },
         "data_description": {
           "poll_interval": "Sekunden zwischen API-Abfragen, solange die Live-Verbindung getrennt ist.",
-          "expose_emergency_stop": "Fügt pro Mähroboter eine Not-Aus-Taste hinzu. Die Aktion mowdeck.emergency_stop ist immer verfügbar."
+          "expose_emergency_stop": "Fügt pro Mähroboter eine Not-Aus-Taste hinzu. Die Aktion mowdeck.emergency_stop ist immer verfügbar.",
+          "persistent_notifications": "Zeigt MowDeck-Benachrichtigungen ab dieser Dringlichkeit zusätzlich als dauerhafte Benachrichtigungen in Home Assistant. Die Ereignis-Entitäten und das Ereignis mowdeck_notification erhalten unabhängig davon jede Benachrichtigung."
         }
       }
     }
@@ -326,6 +328,48 @@
       "firmware": {
         "name": "Firmware"
       }
+    },
+    "event": {
+      "command": {
+        "name": "Befehl",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "pending": "Ausstehend",
+              "accepted": "Angenommen",
+              "rejected": "Abgelehnt",
+              "executed": "Ausgeführt",
+              "expired": "Abgelaufen",
+              "failed": "Fehlgeschlagen"
+            }
+          }
+        }
+      },
+      "notification": {
+        "name": "Benachrichtigung",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "mowing_finished": "Mähen beendet",
+              "mower_stuck": "Mähroboter steckt fest",
+              "battery_low": "Akku schwach",
+              "mower_offline": "Mähroboter offline",
+              "mower_online": "Mähroboter wieder online",
+              "job_started": "Auftrag gestartet",
+              "mower_lifted": "Mähroboter angehoben",
+              "mower_left_dock_unexpectedly": "Ladestation unerwartet verlassen",
+              "geofence_exit": "Garten verlassen",
+              "blade_maintenance": "Messerwartung",
+              "vision_proposal": "Vision-Vorschlag",
+              "vision_auto_proposal": "Automatischer Vision-Vorschlag",
+              "firmware_update_available": "Firmware-Update verfügbar",
+              "firmware_update_finished": "Firmware-Update abgeschlossen",
+              "firmware_update_failed": "Firmware-Update fehlgeschlagen",
+              "test": "Testbenachrichtigung"
+            }
+          }
+        }
+      }
     }
   },
   "exceptions": {
@@ -426,6 +470,16 @@
           "name": "Geschwindigkeit",
           "description": "Geschwindigkeit in Metern pro Sekunde."
         }
+      }
+    }
+  },
+  "selector": {
+    "persistent_notifications": {
+      "options": {
+        "off": "Aus",
+        "critical": "Nur kritische",
+        "warning": "Warnungen und kritische",
+        "info": "Alle"
       }
     }
   }

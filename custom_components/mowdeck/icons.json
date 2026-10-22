@@ -43,6 +43,10 @@
     },
     "binary_sensor": {
       "rain_hold": { "default": "mdi:weather-pouring", "state": { "off": "mdi:weather-partly-cloudy" } }
+    },
+    "event": {
+      "command": { "default": "mdi:console-line" },
+      "notification": { "default": "mdi:bell-ring-outline" }
     }
   },
   "services": {

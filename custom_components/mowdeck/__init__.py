@@ -19,6 +19,8 @@ from .camera import storage_key as camera_storage_key
 from .const import CONF_API_TOKEN, DOMAIN
 from .coordinator import MowDeckCoordinator
 from .health import HealthCoordinator
+from .notifications import NotificationCoordinator
+from .notifications import storage_key as notifications_storage_key
 from .realtime import RealtimeClient
 from .scheduler import SchedulerCoordinator
 from .services import async_setup_services
@@ -28,6 +30,7 @@ PLATFORMS: list[Platform] = [
     Platform.BUTTON,
     Platform.CAMERA,
     Platform.DEVICE_TRACKER,
+    Platform.EVENT,
     Platform.LAWN_MOWER,
     Platform.NUMBER,
     Platform.SELECT,
@@ -48,6 +51,7 @@ class MowDeckRuntimeData:
     realtime: RealtimeClient
     health: HealthCoordinator
     scheduler: SchedulerCoordinator
+    notifications: NotificationCoordinator
 
 
 type MowDeckConfigEntry = ConfigEntry[MowDeckRuntimeData]
@@ -72,15 +76,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> b
     def _auth_failed() -> None:
         entry.async_start_reauth(hass)
 
-    realtime = RealtimeClient(
-        hass, client, coordinator, entry_id=entry.entry_id, on_auth_failed=_auth_failed
-    )
     health = HealthCoordinator(hass, entry, coordinator)
     scheduler = SchedulerCoordinator(hass, entry, coordinator)
+    notifications = NotificationCoordinator(hass, entry, coordinator)
+    await notifications.async_load()
+    realtime = RealtimeClient(
+        hass,
+        client,
+        coordinator,
+        entry_id=entry.entry_id,
+        on_auth_failed=_auth_failed,
+        on_notification=notifications.async_push,
+    )
     # The further services never block the setup; their entities wait for them.
     await health.async_refresh()
     await scheduler.async_refresh()
-    entry.runtime_data = MowDeckRuntimeData(client, coordinator, realtime, health, scheduler)
+    await notifications.async_refresh()
+    entry.runtime_data = MowDeckRuntimeData(
+        client, coordinator, realtime, health, scheduler, notifications
+    )
     entry.async_on_unload(
         coordinator.async_add_listener(_device_updater(hass, entry.entry_id, coordinator))
     )
@@ -142,5 +156,8 @@ async def async_remove_config_entry_device(
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> None:
-    """Forget the entry's stored camera list."""
+    """Forget the entry's stored camera list and delivered notification ids."""
     await Store[dict[str, object]](hass, 1, camera_storage_key(entry.entry_id)).async_remove()
+    await Store[dict[str, object]](
+        hass, 1, notifications_storage_key(entry.entry_id)
+    ).async_remove()

@@ -22,6 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 IDENTITY = "/api/v1/identity"
 FLEET = "/api/v1/fleet"
 TELEMETRY = "/api/v1/telemetry"
+NOTIFICATIONS = "/api/v1/notifications"
 SCHEDULER = "/api/v1/scheduler"
 REALTIME_WS = "/api/v1/realtime/ws"
 
@@ -474,6 +475,16 @@ class MowDeckClient:
                 "POST", f"{TELEMETRY}/mowers/{mower_id}/health/blade-reset", json=body
             )
         )
+
+    # Notifications
+
+    async def get_inbox(self, *, unread: bool = True, limit: int = 50) -> list[dict[str, Any]]:
+        """``GET /notifications/inbox``: the caller's newest notifications, newest first.
+
+        MowDeck keeps inboxes for persons only and answers 403 to an API token."""
+        query = urlencode({"unread": str(unread).lower(), "limit": limit})
+        body = await self._request("GET", f"{NOTIFICATIONS}/inbox?{query}")
+        return [dict(item) for item in body.get("items", [])]
 
     # Scheduler
 
