@@ -1,13 +1,14 @@
 """Switches of a MowDeck mower: its camera light (headlamp), for mowers that have one, and
-one per schedule that mows it (enabled or not)."""
+one per schedule that mows it (enabled or not) and one per map area (part of the next start
+or not)."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
-from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EntityCategory, Platform
+from homeassistant.core import HomeAssistant, callback
 
 from .const import CAN_CONTROL, CAN_EDIT_SCHEDULE
 from .entity import MowDeckEntity, ScheduleEntity, async_add_mower_entities
@@ -37,6 +38,14 @@ async def async_setup_entry(
             if coordinator.data.capabilities.get(m, {}).get("light")
             else []
         ),
+        domain=Platform.SWITCH,
+    )
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, m: [
+            AreaSwitch(coordinator, m, str(area["id"])) for area in coordinator.areas(m)
+        ],
         domain=Platform.SWITCH,
     )
     scheduler = entry.runtime_data.scheduler
@@ -134,3 +143,45 @@ class ScheduleSwitch(ScheduleEntity, SwitchEntity):
             "schedule_enable" if enabled else "schedule_disable",
             "schedule.edit",
         )
+
+
+class AreaSwitch(MowDeckEntity, SwitchEntity):
+    """Whether "start mowing" (and ``mowdeck.start_mow`` without ``area_ids``) mows this map
+    area. Together the area switches are the multi-area selection; the area select shows it."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: MowDeckCoordinator, mower_id: str, area_id: str) -> None:
+        """Create the switch of one area."""
+        super().__init__(coordinator, mower_id, "area")
+        self.area_id = area_id
+        self._attr_unique_id = f"{mower_id}_area_{area_id}"
+        self._attr_translation_placeholders = {"area": self._label()}
+
+    def _label(self) -> str:
+        return dict(self.coordinator.area_labels(self.mower_id)).get(self.area_id, self.area_id)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Follow a renamed area."""
+        self._attr_translation_placeholders = {"area": self._label()}
+        super()._handle_coordinator_update()
+
+    @property
+    def available(self) -> bool:
+        """Available while the area is on the mower's map."""
+        ids = {str(area["id"]) for area in self.coordinator.areas(self.mower_id)}
+        return super().available and self.area_id in ids
+
+    @property
+    def is_on(self) -> bool:
+        """The area is part of the next start."""
+        return self.coordinator.area_selected(self.mower_id, self.area_id)
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Add the area to the next start."""
+        self.coordinator.async_toggle_area(self.mower_id, self.area_id, True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Take the area out of the next start."""
+        self.coordinator.async_toggle_area(self.mower_id, self.area_id, False)

@@ -55,3 +55,43 @@ set_speed:
           step: 0.01
           unit_of_measurement: m/s
           mode: slider
+
+get_map:
+  target:
+    entity:
+      integration: mowdeck
+      domain: lawn_mower
+
+get_heatmap:
+  target:
+    entity:
+      integration: mowdeck
+      domain: lawn_mower
+  fields:
+    layer:
+      required: true
+      example: coverage
+      selector:
+        select:
+          options:
+            - coverage
+            - rtk
+            - wifi
+            - mnet
+    start:
+      required: false
+      selector:
+        datetime:
+    end:
+      required: false
+      selector:
+        datetime:
+    cell:
+      required: false
+      example: 1
+      selector:
+        select:
+          options:
+            - "0.5"
+            - "1"
+            - "2"

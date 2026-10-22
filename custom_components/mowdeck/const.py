@@ -37,8 +37,27 @@ INBOX_RECHECK: Final = timedelta(hours=6)
 # A state older than this counts as offline (Telemetry's own stale flag also counts).
 STALE_AFTER: Final = timedelta(minutes=5)
 
-# The value of the area select that means "every area of the map".
+# The value of the area select that means "every area of the map", and the one shown while
+# the area switches select several (but not all) areas.
 ALL_AREAS: Final = "all"
+SEVERAL_AREAS: Final = "selection"
+
+# MowPattern (apps/web/openapi/fleet.json): the native patterns and their limits; the
+# defaults apply while a mower has no saved mowing defaults.
+PATTERNS: Final = ["stripes", "diagonal", "checkerboard", "edge_only", "random_angle"]
+DEFAULT_PATTERN: Final = {
+    "name": "stripes",
+    "angle_deg": 0.0,
+    "border_laps": 1,
+    "spacing_m": None,
+}
+API_ANGLE_MAX_DEG: Final = 180
+API_BORDER_LAPS_MAX: Final = 4
+API_SPACING_MIN_M: Final = 0.05
+API_SPACING_MAX_M: Final = 2.0
+# Heatmap layers and cell sizes (GET /telemetry/mowers/{id}/heatmap).
+HEATMAP_LAYERS: Final = ["coverage", "rtk", "wifi", "mnet"]
+HEATMAP_CELLS: Final = [0.5, 1.0, 2.0]
 
 # Unnamed areas read "Area N" in map order, as in MowDeck and the vendor app (same rule as
 # mowdeck_contracts.v1.area_display_name, which this integration cannot import).

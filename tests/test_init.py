@@ -79,7 +79,7 @@ async def test_setup_creates_device_and_entities(
 
     area = hass.states.get("select.luba_area")
     assert area is not None
-    assert area.attributes["options"] == ["all", "Front", "Back"]
+    assert area.attributes["options"] == ["all", "Front", "Back", "selection"]
 
 
 async def test_unload_cleans_up(

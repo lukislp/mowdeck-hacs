@@ -168,13 +168,33 @@
       },
       "drive_speed": {
         "name": "Manual drive speed"
+      },
+      "mow_angle": {
+        "name": "Mowing angle"
+      },
+      "mow_border_laps": {
+        "name": "Border laps"
+      },
+      "mow_path_spacing": {
+        "name": "Path spacing"
       }
     },
     "select": {
       "area": {
         "name": "Area",
         "state": {
-          "all": "All areas"
+          "all": "All areas",
+          "selection": "Several areas"
+        }
+      },
+      "mow_pattern": {
+        "name": "Mowing pattern",
+        "state": {
+          "stripes": "Stripes",
+          "diagonal": "Diagonal",
+          "checkerboard": "Checkerboard",
+          "edge_only": "Edge only",
+          "random_angle": "Random angle"
         }
       }
     },
@@ -314,6 +334,18 @@
       },
       "lawn_wet_until": {
         "name": "Lawn wet until"
+      },
+      "mowing_time_today": {
+        "name": "Mowing time today"
+      },
+      "distance_today": {
+        "name": "Distance today"
+      },
+      "jobs_today": {
+        "name": "Jobs today"
+      },
+      "online_time_today": {
+        "name": "Online time today"
       }
     },
     "switch": {
@@ -322,6 +354,9 @@
       },
       "schedule": {
         "name": "Schedule {schedule}"
+      },
+      "area": {
+        "name": "Mow {area}"
       }
     },
     "update": {
@@ -417,6 +452,12 @@
     },
     "action_forbidden": {
       "message": "The API token may not run {command}. Grant {permission} to the token in the MowDeck app."
+    },
+    "no_area_selected": {
+      "message": "No area is selected. Turn on at least one area switch or choose an area."
+    },
+    "no_map": {
+      "message": "MowDeck has no map of this mower yet."
     }
   },
   "issues": {
@@ -469,6 +510,32 @@
         "mps": {
           "name": "Speed",
           "description": "Speed in metres per second."
+        }
+      }
+    },
+    "get_map": {
+      "name": "Get map",
+      "description": "Returns the mower's current map (areas with MowDeck's names, paths, no-go zones, dock) in the local frame of its geo reference."
+    },
+    "get_heatmap": {
+      "name": "Get heatmap",
+      "description": "Returns a heatmap layer of the mower over its map: coverage with missed spots, RTK fix share, or Wi-Fi or mobile signal.",
+      "fields": {
+        "layer": {
+          "name": "Layer",
+          "description": "coverage, rtk, wifi or mnet (mobile network)."
+        },
+        "start": {
+          "name": "Start",
+          "description": "Start of the time range. Default: 7 days ago."
+        },
+        "end": {
+          "name": "End",
+          "description": "End of the time range. Default: now."
+        },
+        "cell": {
+          "name": "Cell size",
+          "description": "Cell size in metres: 0.5, 1 or 2."
         }
       }
     }

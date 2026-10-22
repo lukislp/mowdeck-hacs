@@ -65,6 +65,7 @@ class MowerData:
 
     state: dict[str, Any]
     health: dict[str, Any]
+    today: dict[str, Any]
 
 
 def _enum(options: list[str], key: str) -> Callable[[MowerData], str | None]:
@@ -129,6 +130,18 @@ def _battery_cycle_attributes(health: dict[str, Any]) -> dict[str, Any]:
         "source": "device" if device else "telemetry",
         "tracked_cycles": tracked,
     }
+
+
+def _today(key: str) -> Callable[[MowerData], Any]:
+    """A total of the current UTC day; zero while the mower has health totals but no record
+    for today, unknown without any health totals."""
+
+    def read(data: MowerData) -> Any:
+        if key in data.today:
+            return data.today[key]
+        return 0 if data.health else None
+
+    return read
 
 
 def _blade_attributes(health: dict[str, Any]) -> dict[str, Any]:
@@ -265,6 +278,44 @@ SENSORS: tuple[MowDeckSensorDescription, ...] = (
         value_fn=_number(lambda d: d.health.get("distance_m")),
         health=True,
     ),
+    # Totals of the current UTC day (GET /telemetry/mowers/{id}/health/daily); they restart
+    # at midnight UTC, which TOTAL_INCREASING treats as a reset.
+    MowDeckSensorDescription(
+        key="mowing_time_today",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.HOURS,
+        suggested_unit_of_measurement=UnitOfTime.MINUTES,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=0,
+        value_fn=_number(_today("mowing_hours"), 3),
+        health=True,
+    ),
+    MowDeckSensorDescription(
+        key="distance_today",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.METERS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=0,
+        value_fn=_number(_today("distance_m"), 1),
+        health=True,
+    ),
+    MowDeckSensorDescription(
+        key="jobs_today",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=_number(_today("jobs")),
+        health=True,
+    ),
+    MowDeckSensorDescription(
+        key="online_time_today",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.HOURS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=1,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=_number(_today("online_hours"), 2),
+        health=True,
+    ),
     MowDeckSensorDescription(
         key="battery_cycles",
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -331,8 +382,11 @@ class MowDeckSensor(MowDeckEntity, SensorEntity):
 
     @property
     def native_value(self) -> Any:
-        """The value read from the newest state or the health totals."""
-        return self.entity_description.value_fn(MowerData(self.mower_state, self._totals()))
+        """The value read from the newest state, the health totals or today's totals (zero
+        while the mower has health totals but nothing was recorded today)."""
+        today = self._health.data.today.get(self.mower_id) if self._health else None
+        data = MowerData(self.mower_state, self._totals(), today or {})
+        return self.entity_description.value_fn(data)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:

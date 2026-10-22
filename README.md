@@ -93,13 +93,16 @@ Per mower one device (manufacturer Mammotion, model from the capabilities, firmw
 | Last schedule run | `sensor.luba_last_schedule_run` | outcome of the newest run of the mower: `started`, `skipped_rain`, `skipped_permission`, `skipped_window`, `skipped_mower_busy`, `skipped_manual`, `failed`; attributes `schedule`, `scheduled_for`, `trigger`, `details` |
 | Rain hold | `binary_sensor.luba_rain_hold` | on while MowDeck's rain pause holds the mower's runs (`GET /scheduler/weather/{id}` with the rain settings of the mower's next schedule, MowDeck's defaults without one); attributes `verdict`, `reason`, `wet`, recent rain, provider |
 | Rain pause until, Lawn wet until | `sensor.luba_rain_pause_until`, `sensor.luba_lawn_wet_until` | when the hold ends and when the lawn is estimated dry (unknown when not holding or not wet) |
-| Area | `select.luba_area` | `all` or one map area, named as in MowDeck (the name given in MowDeck, else the mower's own name, else "Area N" / "Bereich N" in map order); used by "start mowing" |
+| Area | `select.luba_area` | `all`, one map area, or `selection` (several areas chosen with the area switches); areas named as in MowDeck (the name given in MowDeck, else the mower's own name, else "Area N" / "Bereich N" in map order); restored after a restart |
+| Mow *area* | `switch.luba_mow_front`, ... | one per map area: whether "start mowing" mows it. The switches are the multi-area selection, the Area select its shortcut; both always agree |
+| Mowing pattern, Mowing angle, Border laps, Path spacing | `select.luba_mowing_pattern`, `number.luba_mowing_angle`, `number.luba_border_laps`, `number.luba_path_spacing` | the mower's mowing defaults in MowDeck (`MowerOut.mow_defaults`, `PUT /fleet/mowers/{id}/mow-defaults`), shared with the web app and schedules: the pattern among the mower's `native_patterns`, angle 0 to 180°, border laps 0 to 4, path spacing in cm within `path_spacing_range_mm` (only where the model has one; unknown while the mower's own spacing applies). Need `mower.control` |
+| Mowing time today, Distance today, Jobs today, Online time today | `sensor.luba_mowing_time_today`, ... | totals of the current **UTC** day (`/telemetry/mowers/{id}/health/daily`, MowDeck counts days in UTC), every 15 minutes; online time is diagnostic and disabled by default |
 | Position | `device_tracker.luba_position` | GPS (`position` of the state), attributes `heading` (degrees, one decimal) and `position_source` (`rtk`, `gnss` or `dock`) |
 | Camera | `camera.luba_camera` | the live camera over MowDeck's camera relay as WebRTC (see [Cameras](#cameras)); only for mowers whose capabilities name a camera (`camera` `cloud` or `local`) |
 | Further cameras | `camera.luba_front_right_camera`, ... | one per further camera that delivers video, added after the first stream (see [Cameras](#cameras)) |
 | Camera light | `switch.luba_camera_light` | the camera's headlamp: `light_on` of the state (unknown while not reported), `set_light`; only for mowers whose capabilities have `light` |
 
-**Start mowing** resumes a paused job; otherwise it starts the area chosen in the Area select, or every area of the map. A select holds one value, so several areas go through the action `mowdeck.start_mow`.
+**Start mowing** resumes a paused job; otherwise it starts the selected areas (area switches / Area select) in map order, with the mower's mowing defaults as pattern once they are saved in MowDeck (until then the mower's own defaults). With every area switch off, starting is refused.
 
 The event `mowdeck_command_result` carries every command status change (`mower_id`, `command_id`, `status`, `reason`); the entity `event.luba_command` fires with the status as event type (`pending`, `accepted`, `rejected`, `executed`, `expired`, `failed`) and `command_id` and `reason` as attributes.
 
@@ -152,6 +155,8 @@ Targets are MowDeck lawn mower entities.
 | `mowdeck.emergency_stop` | | `emergency_stop` |
 | `mowdeck.set_blade_height` | `mm` (10 to 120) | `set_blade_height` |
 | `mowdeck.set_speed` | `mps` (up to 2, sent with two decimals) | `set_speed` |
+| `mowdeck.get_map` | | answers the current map (`GET /telemetry/mowers/{id}/map`) with `display_name` per area; response only |
+| `mowdeck.get_heatmap` | `layer` (`coverage`, `rtk`, `wifi`, `mnet`), `start`, `end` (default the last 7 days), `cell` (0.5, 1 or 2 m) | answers the heatmap layer (`GET /telemetry/mowers/{id}/heatmap`); response only |
 
 ```yaml
 action: mowdeck.start_mow
@@ -160,6 +165,15 @@ target:
 data:
   area_ids: ["zone-front", "zone-back"]
   pattern: {name: stripes, angle_deg: 45}
+```
+
+```yaml
+action: mowdeck.get_heatmap
+target:
+  entity_id: lawn_mower.luba
+data:
+  layer: coverage
+response_variable: heatmap
 ```
 
 ## Troubleshooting

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.lawn_mower import (
@@ -9,9 +10,10 @@ from homeassistant.components.lawn_mower import (
     LawnMowerEntity,
     LawnMowerEntityFeature,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceResponse
+from homeassistant.exceptions import ServiceValidationError
 
-from .const import SPEED_DECIMALS
+from .const import DOMAIN, SPEED_DECIMALS
 from .entity import MowDeckEntity, async_add_mower_entities
 
 if TYPE_CHECKING:
@@ -92,16 +94,60 @@ class MowDeckLawnMower(MowDeckEntity, LawnMowerEntity):
     async def async_start_mow(
         self, area_ids: list[str] | None = None, pattern: dict[str, Any] | None = None
     ) -> None:
-        """``mowdeck.start_mow``: start the given areas (default: the selection)."""
-        command: dict[str, Any] = {
-            "kind": "start_mow",
-            "area_ids": list(area_ids)
-            if area_ids
-            else self.coordinator.area_ids_to_mow(self.mower_id),
-        }
+        """``mowdeck.start_mow``: start the given areas (default: the selected areas) with the
+        given pattern (default: the mower's mowing defaults, when saved)."""
+        areas = list(area_ids) if area_ids else self.coordinator.area_ids_to_mow(self.mower_id)
+        if not areas:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="no_area_selected"
+            )
+        command: dict[str, Any] = {"kind": "start_mow", "area_ids": areas}
         if pattern:
             command["pattern"] = dict(pattern)
+        elif self.coordinator.has_mow_defaults(self.mower_id):
+            command["pattern"] = self.coordinator.mow_pattern(self.mower_id)
         await self.async_send_command(command)
+
+    async def async_get_map(self) -> ServiceResponse:
+        """``mowdeck.get_map``: the mower's current map with MowDeck's area names."""
+        answer = await self.async_call_api(
+            self.coordinator.client.get_map(self.mower_id), "get_map", "mower.view"
+        )
+        if answer is None:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="no_map")
+        mower_map = dict(answer.get("map") or {})
+        names = dict(self.coordinator.area_labels(self.mower_id))
+        areas = [
+            {**area, "display_name": names.get(str(area.get("id")))}
+            for area in mower_map.get("areas") or []
+            if isinstance(area, dict)
+        ]
+        return {
+            "mower_id": self.mower_id,
+            "revision": answer.get("revision"),
+            "observed_at": answer.get("observed_at"),
+            "map": {**mower_map, "areas": areas},
+        }
+
+    async def async_get_heatmap(
+        self,
+        layer: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        cell: float | None = None,
+    ) -> ServiceResponse:
+        """``mowdeck.get_heatmap``: a heatmap layer of the mower (default: the last 7 days)."""
+        return await self.async_call_api(
+            self.coordinator.client.get_heatmap(
+                self.mower_id,
+                layer,
+                start=start.isoformat() if start else None,
+                end=end.isoformat() if end else None,
+                cell=cell,
+            ),
+            "get_heatmap",
+            "mower.view",
+        )
 
     async def async_emergency_stop(self) -> None:
         """``mowdeck.emergency_stop``: stop at once (allowed for viewers too)."""
