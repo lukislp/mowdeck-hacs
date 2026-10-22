@@ -2,8 +2,8 @@
 
 ``event.<mower>_command`` fires for every status change of a command (the Realtime
 ``command_result`` message, also the bus event ``mowdeck_command_result``).
-``event.<mower>_notification`` fires for every MowDeck notification of the mower (also the
-bus event ``mowdeck_notification``); it exists once a notification source delivers, see
+``event.<mower>_notification`` fires for every MowDeck notification of the mower that the
+Realtime WebSocket pushes (also the bus event ``mowdeck_notification``), see
 ``notifications.py``.
 """
 
@@ -34,19 +34,11 @@ async def async_setup_entry(
     entry: MowDeckConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """A command event per mower; a notification event per mower once notifications arrive."""
-    async_add_mower_entities(
-        entry, async_add_entities, lambda coordinator, m: [CommandEvent(coordinator, m)]
-    )
-    notifications = entry.runtime_data.notifications
+    """A command event and a notification event per mower."""
     async_add_mower_entities(
         entry,
         async_add_entities,
-        lambda coordinator, m: (
-            [NotificationEvent(coordinator, m)] if notifications.data.available else []
-        ),
-        fingerprint=lambda m: notifications.data.available,
-        listen=[notifications],
+        lambda coordinator, m: [CommandEvent(coordinator, m), NotificationEvent(coordinator, m)],
     )
 
 
@@ -110,5 +102,5 @@ class NotificationEvent(_DispatchedEvent):
         kind = payload.get("kind")
         if kind not in NOTIFICATION_KINDS:
             return None
-        keys = ("notification_id", "severity", "title", "body", "url", "occurred_at")
+        keys = ("notification_id", "scope", "severity", "title", "body", "url", "occurred_at")
         return str(kind), {k: payload.get(k) for k in keys}

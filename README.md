@@ -25,13 +25,15 @@ In the MowDeck web app: **Settings, API tokens, New token**. Give it a name ("Ho
 
 | Permission | Needed for |
 | --- | --- |
-| `mower.view` | required: mowers, states, map, live updates, the cameras, the health totals, **Check firmware now** |
+| `mower.view` | required: mowers, states, map, live updates, the cameras, the health totals, **Check firmware now**. **Grant it on the whole account** to receive MowDeck notifications: only an account-wide `mower.view` implies `notifications.view`, which MowDeck needs to push the account's notifications to a token |
 | `mower.control` | start, pause, dock, end job, blade height, mowing speed, light (without it Home Assistant is read only; the emergency stop works for viewers too) |
-| `mower.drive` | optional: the manual drive speed setting (the number is disabled by default) |
+| `mower.drive` | optional: the manual drive speed setting (the number is disabled by default); also needed on a mower for its Vision notifications (`vision_proposal`, `vision_auto_proposal`) |
 | `fleet.manage` | optional: installing a firmware update from the update entity, **Blade changed** |
 | `schedule.edit` | optional: the schedule switches and **Skip next run** buttons (together with `mower.control`, which **Run now** needs alone). Seeing schedules, the next mowing, the last run and the rain decision only needs `mower.view` (`scheduler.view` follows it) |
 
 The integration asks MowDeck which of these the token holds on each mower (`POST /api/v1/identity/me/permissions`, every 10 minutes) and only creates entities whose action the token may run; a MowDeck that cannot answer that question hides nothing, and a refused action names the missing permission.
+
+**After updating MowDeck, issue the token again**: a token keeps the permissions it was created with, so a token from before MowDeck 0.7.0 holds no `notifications.view` and receives no notifications even with an account-wide `mower.view`. Create a new token with the same grants and enter it with **Reconfigure** on the integration, then revoke the old one.
 
 The secret (`mdk_...`) is shown once. Through the API: `POST /api/v1/identity/accounts/{account_id}/api-tokens` with `{"name": "Home Assistant", "grants": [{"level": {"type": "account", "id": "<account id>"}, "permissions": ["mower.view", "mower.control"]}]}`.
 
@@ -59,7 +61,7 @@ The flow exchanges the token, reads `/api/v1/identity/me` and lists the mowers; 
 | Capabilities, map, token permissions | polled | every 10 minutes |
 | Health totals (blade hours, mowing hours, distance, battery cycles) | polled, own coordinator | every 15 minutes |
 | Schedules, their runs, the rain decision | polled, own coordinator | every 5 minutes and right after a schedule action |
-| Notifications | the inbox, polled, own coordinator (later pushed over the WebSocket) | every 60 s; every 6 hours while MowDeck gives the token no inbox (see [Notifications](#notifications)) |
+| Notifications | pushed over the WebSocket (`notification` messages) | live; nothing is polled (see [Notifications](#notifications)) |
 | Command results | pushed over the WebSocket | live |
 
 Each MowDeck service has its own coordinator: when one fails, only its entities turn unavailable. When one answers "forbidden" (403), a Repairs issue names the permission the token lacks; it disappears with the next successful update.
@@ -110,13 +112,19 @@ The event `mowdeck_command_result` carries every command status change (`mower_i
 
 MowDeck notifications (mower stuck, battery low, mowing finished, theft alarms, firmware updates and so on) reach Home Assistant three ways:
 
-- the entity `event.luba_notification` per mower: the event type is the notification kind (`mowing_finished`, `mower_stuck`, `battery_low`, `mower_offline`, `mower_online`, `job_started`, `mower_lifted`, `mower_left_dock_unexpectedly`, `geofence_exit`, `blade_maintenance`, `vision_proposal`, `vision_auto_proposal`, `firmware_update_available`, `firmware_update_finished`, `firmware_update_failed`, `test`), the attributes are `notification_id`, `severity` (`info`, `warning`, `critical`), `title`, `body`, `url` and `occurred_at`;
+- the entity `event.luba_notification` per mower: the event type is the notification kind (`mowing_finished`, `mower_stuck`, `battery_low`, `mower_offline`, `mower_online`, `job_started`, `mower_lifted`, `mower_left_dock_unexpectedly`, `geofence_exit`, `blade_maintenance`, `vision_proposal`, `vision_auto_proposal`, `firmware_update_available`, `firmware_update_finished`, `firmware_update_failed`, `test`), the attributes are `notification_id`, `scope`, `severity` (`info`, `warning`, `critical`), `title`, `body`, `url` and `occurred_at`;
 - the bus event `mowdeck_notification` with the same fields plus `mower_id`, `mower_name` and `config_entry_id` (also for notifications without a mower and for kinds this version does not know);
 - optionally a persistent notification (see the options).
 
-Both events have logbook entries. Every notification fires once: Home Assistant remembers the delivered ids, and the unread backlog found at the very first start is not replayed. Home Assistant never marks notifications read in MowDeck.
+Both events have logbook entries.
 
-**Limitation of the current MowDeck version:** MowDeck keeps inboxes for persons only and answers an API token's `GET /api/v1/notifications/inbox` with 403. The integration then treats the inbox as unavailable (no error, no Repairs issue), asks again every 6 hours, and creates the notification entity only once notifications arrive. As soon as MowDeck pushes notifications over the Realtime WebSocket (`notification` messages) or gives API tokens an inbox, they work without an update of this integration's configuration.
+**How they arrive.** MowDeck (0.7.0 or newer) pushes every notification of a subscribed mower over the Realtime WebSocket as a `notification` message with `scope` `account` to the account's API tokens that hold `notifications.view`. The integration subscribes to every mower it sees, so nothing is polled and nothing else needs configuring. Requirements and limits:
+
+- The token needs `mower.view` **on the whole account** (that implies `notifications.view`); a token limited to a site, group or mower receives none. Vision kinds also need `mower.drive` on the mower. A token created before MowDeck 0.7.0 must be issued again (see [Create an API token](#create-an-api-token-in-mowdeck)).
+- Account notifications are rendered in English, whatever language the people of the account use.
+- They have no inbox item behind them: Home Assistant cannot mark them read or acknowledge them (MowDeck answers an API token's `GET /notifications/inbox` with 403, so the inbox is never asked).
+- MowDeck replays nothing after a reconnect: a notification raised while Home Assistant was offline or the socket was down is not delivered later.
+- Every notification fires once: Home Assistant remembers the delivered ids, also across restarts.
 
 
 ## Cameras
@@ -179,6 +187,7 @@ response_variable: heatmap
 ## Troubleshooting
 
 - **"MowDeck live updates are refused" (Repairs)**: the Realtime WebSocket closes with 4401 even with a fresh access token. Check that the token still exists and has `mower.view`. Polling continues meanwhile; the issue disappears when the socket works again.
+- **No notifications arrive**: the token lacks `notifications.view`. Grant `mower.view` on the whole account (not a site, group or mower) and, after updating MowDeck to 0.7.0 or newer, issue a new token (old tokens keep their old permission set). Vision notifications also need `mower.drive` on the mower. Notifications raised while the live connection was down are not delivered later.
 - **Reauthentication requested**: the API token was revoked, expired or its owner disabled. Create a new token and enter it in the reauth dialog (it must belong to the same account).
 - **Cannot connect**: use the URL that Home Assistant itself can reach (the Docker network, the LAN address, or the Tailscale name). Behind Tailscale, the Home Assistant host must be in the tailnet; MagicDNS names such as `https://mowdeck.<tailnet>.ts.net` work once HTTPS certificates are enabled for the tailnet.
 - **HTTPS**: with `https://` the WebSocket uses `wss://` on the same host. Self-signed certificates are not accepted; use Tailscale HTTPS or a certificate from a public CA.

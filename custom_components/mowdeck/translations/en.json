@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to MowDeck",
-        "description": "Enter the address of your MowDeck installation and an API token created in the MowDeck app (Settings, API tokens) with the permissions mower.view and mower.control.",
+        "description": "Enter the address of your MowDeck installation and an API token created in the MowDeck app (Settings, API tokens) with the permissions mower.view and mower.control. Grant mower.view on the whole account to receive MowDeck notifications.",
         "data": {
           "url": "URL",
           "api_token": "API token"

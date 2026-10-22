@@ -2,10 +2,12 @@
 
 Protocol (services/realtime/README.md in the monorepo): send ``auth`` with an access token as
 the first message, wait for ``ready``, ``subscribe`` to the mower ids, then receive ``state``,
-``command_result`` and ``revoked`` messages. Before the access token expires a fresh one is
-sent with another ``auth``. The socket reconnects with exponential backoff; close code 4401
-(unauthorized) triggers a token refresh, and when even a fresh token is refused (or the API
-token itself is rejected) a Repairs issue is raised that stays until a connection succeeds.
+``command_result``, ``notification`` and ``revoked`` messages (``notification`` carries the
+account's notifications to API tokens with ``notifications.view``; they go to the notification
+hub). Before the access token expires a fresh one is sent with another ``auth``. The socket
+reconnects with exponential backoff; close code 4401 (unauthorized) triggers a token refresh,
+and when even a fresh token is refused (or the API token itself is rejected) a Repairs issue
+is raised that stays until a connection succeeds.
 """
 
 from __future__ import annotations
@@ -227,7 +229,6 @@ class RealtimeClient:
                         self._hass, command_signal(self._entry_id, result["mower_id"]), result
                     )
             elif kind == "notification" and self._on_notification is not None:
-                # Announced by MowDeck, not released yet: the item as in the inbox.
                 self._on_notification(message.get("notification"))
             elif kind == "revoked":
                 mower_ids = [str(m) for m in message.get("mower_ids", [])]
