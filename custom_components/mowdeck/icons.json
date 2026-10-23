@@ -39,6 +39,8 @@
     },
     "button": {
       "emergency_stop": { "default": "mdi:alert-octagon" },
+      "setting_non_work_hours_clear": { "default": "mdi:sleep-off" },
+      "setting_other_clear": { "default": "mdi:timer-off-outline" },
       "return_to_dock": { "default": "mdi:home-import-outline" },
       "end_job": { "default": "mdi:stop-circle-outline" },
       "firmware_check": { "default": "mdi:cloud-search-outline" },
@@ -55,16 +57,38 @@
       "mow_angle": { "default": "mdi:angle-acute" },
       "mow_border_laps": { "default": "mdi:vector-square" },
       "mow_path_spacing": { "default": "mdi:arrow-expand-horizontal" },
-      "blade_threshold": { "default": "mdi:saw-blade" }
+      "blade_threshold": { "default": "mdi:saw-blade" },
+      "setting_voice_volume": { "default": "mdi:volume-high" },
+      "setting_recharge_level": { "default": "mdi:battery-arrow-down-outline" },
+      "setting_resume_level": { "default": "mdi:battery-arrow-up-outline" },
+      "setting_other": { "default": "mdi:cog-outline" }
     },
     "select": {
       "area": { "default": "mdi:texture-box" },
-      "mow_pattern": { "default": "mdi:texture" }
+      "mow_pattern": { "default": "mdi:texture" },
+      "setting_turn_style": { "default": "mdi:rotate-right" },
+      "setting_traversal_mode": { "default": "mdi:map-marker-path" },
+      "setting_wildlife_safety": { "default": "mdi:paw" },
+      "setting_voice_gender": { "default": "mdi:account-voice" },
+      "setting_other": { "default": "mdi:cog-outline" }
     },
     "switch": {
       "light": { "default": "mdi:lightbulb-outline", "state": { "on": "mdi:lightbulb-on" } },
       "schedule": { "default": "mdi:calendar-blank", "state": { "on": "mdi:calendar-check" } },
-      "area": { "default": "mdi:texture-box" }
+      "area": { "default": "mdi:texture-box" },
+      "setting_rain_detection": { "default": "mdi:weather-rainy" },
+      "setting_side_led": { "default": "mdi:led-outline", "state": { "on": "mdi:led-on" } },
+      "setting_night_light": { "default": "mdi:lightbulb-night-outline", "state": { "on": "mdi:lightbulb-night" } },
+      "setting_voice_enabled": { "default": "mdi:volume-off", "state": { "on": "mdi:account-voice" } },
+      "setting_smart_recharge_level": { "default": "mdi:battery-sync-outline" },
+      "setting_smart_resume_level": { "default": "mdi:battery-sync-outline" },
+      "setting_other": { "default": "mdi:cog-outline" }
+    },
+    "time": {
+      "setting_non_work_hours_start": { "default": "mdi:sleep" },
+      "setting_non_work_hours_end": { "default": "mdi:weather-sunset-up" },
+      "setting_other_start": { "default": "mdi:clock-start" },
+      "setting_other_end": { "default": "mdi:clock-end" }
     },
     "device_tracker": {
       "position": { "default": "mdi:map-marker" }
