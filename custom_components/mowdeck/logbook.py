@@ -8,7 +8,7 @@ from typing import Any
 from homeassistant.components.logbook import LOGBOOK_ENTRY_MESSAGE, LOGBOOK_ENTRY_NAME
 from homeassistant.core import Event, HomeAssistant, callback
 
-from .const import DOMAIN, EVENT_COMMAND_RESULT, EVENT_NOTIFICATION
+from .const import DOMAIN, EVENT_COMMAND_RESULT, EVENT_NOTIFICATION, EVENT_VISION_PROPOSAL
 
 
 @callback
@@ -16,7 +16,8 @@ def async_describe_events(
     hass: HomeAssistant,
     async_describe_event: Callable[[str, str, Callable[[Event], dict[str, str]]], None],
 ) -> None:
-    """Describe ``mowdeck_notification`` and ``mowdeck_command_result``."""
+    """Describe ``mowdeck_notification``, ``mowdeck_command_result`` and
+    ``mowdeck_vision_proposal``."""
 
     def mower_name(data: dict[str, Any]) -> str:
         name = data.get("mower_name")
@@ -44,5 +45,14 @@ def async_describe_events(
             message += f": {data['reason']}"
         return {LOGBOOK_ENTRY_NAME: mower_name(data), LOGBOOK_ENTRY_MESSAGE: message}
 
+    @callback
+    def describe_proposal(event: Event) -> dict[str, str]:
+        data = dict(event.data)
+        message = f"Vision proposal is {data.get('state', 'unknown')}"
+        if data.get("action"):
+            message += f" ({data['action']})"
+        return {LOGBOOK_ENTRY_NAME: mower_name(data), LOGBOOK_ENTRY_MESSAGE: message}
+
     async_describe_event(DOMAIN, EVENT_NOTIFICATION, describe_notification)
+    async_describe_event(DOMAIN, EVENT_VISION_PROPOSAL, describe_proposal)
     async_describe_event(DOMAIN, EVENT_COMMAND_RESULT, describe_command)

@@ -23,6 +23,7 @@ IDENTITY = "/api/v1/identity"
 FLEET = "/api/v1/fleet"
 TELEMETRY = "/api/v1/telemetry"
 SCHEDULER = "/api/v1/scheduler"
+VISION = "/api/v1/vision"
 REALTIME_WS = "/api/v1/realtime/ws"
 
 # Questions per ``POST /identity/me/permissions`` (the API accepts up to 100).
@@ -65,6 +66,14 @@ class Problem:
         message = self.detail or self.title or "error"
         suffix = f" (correlation id {self.correlation_id})" if self.correlation_id else ""
         return f"HTTP {self.status}: {message}{suffix}"
+
+
+@dataclass(frozen=True, slots=True)
+class Blob:
+    """A binary answer (an image) with its media type."""
+
+    content: bytes
+    content_type: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,6 +312,32 @@ class MowDeckClient:
                 "%s %s failed (%s), retry %s in %ss", method, path, failure, attempt, delay
             )
             await asyncio.sleep(delay)
+
+    async def _get_bytes(self, path: str) -> Blob:
+        """An authenticated GET of a binary resource (one retry with a fresh access token after
+        a 401); errors as for JSON requests."""
+        for attempt in range(2):
+            token = await self.async_get_access_token(force_refresh=attempt > 0)
+            try:
+                async with self._session.get(
+                    self.base_url + path,
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=self._timeout,
+                ) as response:
+                    if response.status < 400:
+                        content_type = response.headers.get("Content-Type", "")
+                        return Blob(await response.read(), content_type.split(";")[0].strip())
+                    try:
+                        body = await response.json(content_type=None)
+                    except ValueError:
+                        body = None
+                    error = _error_for(Problem.from_body(response.status, body), authenticated=True)
+            except (aiohttp.ClientError, TimeoutError) as err:
+                msg = f"request to {self.base_url} failed: {err!r}"
+                raise MowDeckConnectionError(msg) from err
+            if not isinstance(error, MowDeckAuthError) or attempt > 0:
+                raise error
+        raise error  # pragma: no cover - the loop always returns or raises
 
     # Identity
 
@@ -570,6 +605,32 @@ class MowDeckClient:
             params["cell"] = cell
         query = urlencode(params)
         return dict(await self._request("GET", f"{TELEMETRY}/mowers/{mower_id}/heatmap?{query}"))
+
+    # Vision (AI assist)
+
+    async def start_vision(self, mower_id: str, task: str = "recover") -> dict[str, Any]:
+        """``POST /vision/mowers/{id}/recover`` without images (the mower's gateway takes the
+        photo): starts an analysis, answers the new ``ProposalOut`` (``can_drive``). 409 while a
+        proposal of the mower is open or without a usable provider, 429 beyond the daily cap,
+        403 ``feature-not-in-plan``. Never retried (each request starts an analysis)."""
+        return dict(
+            await self._request("POST", f"{VISION}/mowers/{mower_id}/recover", json={"task": task})
+        )
+
+    async def latest_proposal(self, mower_id: str) -> dict[str, Any] | None:
+        """``GET /vision/mowers/{id}/proposals?limit=1``: the mower's newest proposal, if any."""
+        body = await self._request("GET", f"{VISION}/mowers/{mower_id}/proposals?limit=1")
+        items = body.get("items", []) if isinstance(body, Mapping) else []
+        return dict(items[0]) if items else None
+
+    async def get_proposal(self, proposal_id: str) -> dict[str, Any]:
+        """``GET /vision/proposals/{id}``: one proposal with its frames, assessment and steps."""
+        return dict(await self._request("GET", f"{VISION}/proposals/{proposal_id}"))
+
+    async def get_proposal_image(self, proposal_id: str, index: int) -> Blob:
+        """``GET /vision/proposals/{id}/images/{index}``: an image the model saw (JPEG or PNG);
+        404 once it was purged after the proposal's TTL."""
+        return await self._get_bytes(f"{VISION}/proposals/{proposal_id}/images/{index}")
 
 
 class _RetryableStatusError(Exception):

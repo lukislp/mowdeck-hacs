@@ -132,6 +132,9 @@
       },
       "schedule_skip_next": {
         "name": "Nächsten Lauf von {schedule} überspringen"
+      },
+      "start_ai_analysis": {
+        "name": "KI-Analyse starten"
       }
     },
     "camera": {
@@ -421,6 +424,86 @@
       },
       "online_time_today": {
         "name": "Online-Zeit heute"
+      },
+      "ai_recovery": {
+        "name": "KI-Befreiung",
+        "state": {
+          "analysing": "Analysiert",
+          "proposed": "Vorschlag wartet auf Freigabe",
+          "rejected_by_ai": "Kein Vorschlag",
+          "failed": "Analyse fehlgeschlagen",
+          "rejected": "Abgelehnt",
+          "expired": "Abgelaufen",
+          "executing": "Wird ausgeführt",
+          "verifying": "Wird geprüft",
+          "recovered": "Befreit",
+          "not_recovered": "Nicht befreit",
+          "aborted": "Abgebrochen"
+        },
+        "state_attributes": {
+          "proposal_id": {
+            "name": "Vorschlags-ID"
+          },
+          "task": {
+            "name": "Aufgabe",
+            "state": {
+              "recover": "Mäher befreien",
+              "find_dock": "Station finden"
+            }
+          },
+          "trigger": {
+            "name": "Auslöser",
+            "state": {
+              "manual": "Manuell",
+              "error": "Automatisch (Fehler)"
+            }
+          },
+          "round": {
+            "name": "Runde"
+          },
+          "action": {
+            "name": "Aktion",
+            "state": {
+              "drive": "Fahren",
+              "return_to_dock": "Zur Station",
+              "resume": "Auftrag fortsetzen",
+              "none": "Keine"
+            }
+          },
+          "fallback": {
+            "name": "Regelbasierter Ersatz"
+          },
+          "step_count": {
+            "name": "Fahrschritte"
+          },
+          "drive_seconds": {
+            "name": "Fahrzeit"
+          },
+          "steps": {
+            "name": "Schritte"
+          },
+          "confidence": {
+            "name": "Konfidenz"
+          },
+          "situation": {
+            "name": "Situation"
+          },
+          "rationale": {
+            "name": "Begründung"
+          },
+          "detail": {
+            "name": "Detail"
+          },
+          "final": {
+            "name": "Abgeschlossen"
+          },
+          "expires_at": {
+            "name": "Freigabe möglich bis"
+          },
+          "link": {
+            "name": "In MowDeck öffnen"
+          }
+        }
       }
     },
     "switch": {
@@ -479,6 +562,59 @@
             }
           }
         }
+      },
+      "ai_recovery": {
+        "name": "KI-Befreiung",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "created": "Erstellt",
+              "updated": "Aktualisiert"
+            }
+          },
+          "proposal_id": {
+            "name": "Vorschlags-ID"
+          },
+          "state": {
+            "name": "Zustand",
+            "state": {
+              "analysing": "Analysiert",
+              "proposed": "Vorschlag wartet auf Freigabe",
+              "rejected_by_ai": "Kein Vorschlag",
+              "failed": "Analyse fehlgeschlagen",
+              "rejected": "Abgelehnt",
+              "expired": "Abgelaufen",
+              "executing": "Wird ausgeführt",
+              "verifying": "Wird geprüft",
+              "recovered": "Befreit",
+              "not_recovered": "Nicht befreit",
+              "aborted": "Abgebrochen"
+            }
+          },
+          "action": {
+            "name": "Aktion",
+            "state": {
+              "drive": "Fahren",
+              "return_to_dock": "Zur Station",
+              "resume": "Auftrag fortsetzen",
+              "none": "Keine"
+            }
+          },
+          "final": {
+            "name": "Abgeschlossen"
+          },
+          "link": {
+            "name": "In MowDeck öffnen"
+          }
+        }
+      }
+    },
+    "image": {
+      "ai_recovery_image": {
+        "name": "KI-Befreiung Bild"
+      },
+      "ai_recovery_map": {
+        "name": "KI-Befreiung Karte"
       }
     }
   },

@@ -2,6 +2,8 @@
 
 ``event.<mower>_command`` fires for every status change of a command (the Realtime
 ``command_result`` message, also the bus event ``mowdeck_command_result``).
+``event.<mower>_ai_recovery`` fires for every realtime ``vision_proposal`` message of the
+mower (``created``, ``updated``; also the bus event ``mowdeck_vision_proposal``).
 ``event.<mower>_notification`` fires for every MowDeck notification of the mower that the
 Realtime WebSocket pushes (also the bus event ``mowdeck_notification``), see
 ``notifications.py``.
@@ -19,6 +21,7 @@ from .const import COMMAND_STATES, NOTIFICATION_KINDS
 from .entity import MowDeckEntity, async_add_mower_entities
 from .notifications import notification_signal
 from .realtime import command_signal
+from .vision import PROPOSAL_EVENTS, vision_signal
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -34,7 +37,16 @@ async def async_setup_entry(
     entry: MowDeckConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """A command event and a notification event per mower."""
+    """A command event and a notification event per mower; a Vision event per mower where
+    MowDeck runs Vision."""
+    vision = entry.runtime_data.vision
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, m: [VisionEvent(coordinator, m)] if vision.data.available else [],
+        fingerprint=lambda m: vision.data.available,
+        listen=[vision],
+    )
     async_add_mower_entities(
         entry,
         async_add_entities,
@@ -104,3 +116,24 @@ class NotificationEvent(_DispatchedEvent):
             return None
         keys = ("notification_id", "scope", "severity", "title", "body", "url", "occurred_at")
         return str(kind), {k: payload.get(k) for k in keys}
+
+
+class VisionEvent(_DispatchedEvent):
+    """The mower's Vision proposals: ``created`` for a new one, ``updated`` for every later
+    state change; the attributes say which proposal and where it stands."""
+
+    entity_description = EventEntityDescription(key="ai_recovery", event_types=PROPOSAL_EVENTS)
+
+    def __init__(self, coordinator: MowDeckCoordinator, mower_id: str) -> None:
+        """Create the event entity."""
+        super().__init__(coordinator, mower_id, "ai_recovery")
+
+    def _signal(self) -> str:
+        return vision_signal(self.coordinator.config_entry.entry_id, self.mower_id)
+
+    def _event(self, payload: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+        event = payload.get("event")
+        if event not in PROPOSAL_EVENTS:
+            return None
+        keys = ("proposal_id", "state", "action", "final", "link")
+        return str(event), {k: payload.get(k) for k in keys}

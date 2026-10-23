@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import (
     CAN_CONTROL,
+    CAN_DRIVE,
     CAN_EDIT_SCHEDULE,
     CAN_MANAGE_MOWERS,
     CONF_EXPOSE_EMERGENCY_STOP,
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
     from . import MowDeckConfigEntry
     from .coordinator import MowDeckCoordinator
     from .scheduler import SchedulerCoordinator
+    from .vision import VisionCoordinator
 
 PARALLEL_UPDATES = 0
 
@@ -65,6 +67,23 @@ async def async_setup_entry(
         return buttons
 
     async_add_mower_entities(entry, async_add_entities, entities, domain=Platform.BUTTON)
+
+    vision = entry.runtime_data.vision
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, m: (
+            [VisionStartButton(coordinator, m, vision)]
+            if vision.data.available and coordinator.permitted(m, CAN_DRIVE)
+            else []
+        ),
+        domain=Platform.BUTTON,
+        fingerprint=lambda m: (
+            entry.runtime_data.coordinator.fingerprint(m),
+            vision.data.available,
+        ),
+        listen=[vision],
+    )
 
     scheduler = entry.runtime_data.scheduler
 
@@ -199,3 +218,27 @@ class ScheduleSkipButton(ScheduleEntity, ButtonEntity):
             "schedule_skip_next",
             "schedule.edit",
         )
+
+
+class VisionStartButton(MowDeckEntity, ButtonEntity):
+    """Starts a Vision analysis of the mower (``POST /vision/mowers/{id}/recover``, task
+    ``recover``, ``mower.drive``): the mower takes a photo and MowDeck proposes how to free it.
+    The proposal shows in the AI recovery sensor and image; approving it happens in MowDeck."""
+
+    entity_description = ButtonEntityDescription(key="start_ai_analysis")
+
+    def __init__(
+        self, coordinator: MowDeckCoordinator, mower_id: str, vision: VisionCoordinator
+    ) -> None:
+        """Create the button."""
+        super().__init__(coordinator, mower_id, "start_ai_analysis", service=vision)
+        self._vision = vision
+
+    async def async_press(self) -> None:
+        """Start the analysis; MowDeck refuses while a proposal of the mower is open."""
+        proposal = await self.async_call_api(
+            self.coordinator.client.start_vision(self.mower_id),
+            "start_ai_analysis",
+            "mower.drive",
+        )
+        self._vision.async_set_proposal(self.mower_id, proposal)

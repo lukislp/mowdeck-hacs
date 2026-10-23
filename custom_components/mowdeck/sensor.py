@@ -38,6 +38,7 @@ from .const import (
 )
 from .entity import MowDeckEntity, async_add_mower_entities
 from .scheduler import parse_time
+from .vision import PROPOSAL_STATES
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
     from .coordinator import MowDeckCoordinator
     from .health import HealthCoordinator
     from .scheduler import SchedulerCoordinator
+    from .vision import VisionCoordinator
 
 PARALLEL_UPDATES = 0
 
@@ -498,6 +500,17 @@ async def async_setup_entry(
         ],
         domain=Platform.SENSOR,
     )
+    vision = entry.runtime_data.vision
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, m: (
+            [VisionSensor(coordinator, m, vision)] if vision.data.available else []
+        ),
+        domain=Platform.SENSOR,
+        fingerprint=lambda m: vision.data.available,
+        listen=[vision],
+    )
     scheduler = entry.runtime_data.scheduler
     async_add_mower_entities(
         entry,
@@ -669,3 +682,70 @@ class SchedulerSensor(MowDeckEntity, SensorEntity):
         """The schedule behind the value, where there is one."""
         attributes = self.entity_description.attributes_fn
         return attributes(self._scheduler, self.mower_id) if attributes else None
+
+
+def _steps(proposal: dict[str, Any]) -> list[dict[str, Any]]:
+    """The drive steps of a full proposal (the realtime summary only counts them)."""
+    steps = proposal.get("steps")
+    if not isinstance(steps, list):
+        return []
+    keys = ("linear", "angular", "seconds", "outcome")
+    return [{k: step.get(k) for k in keys} for step in steps if isinstance(step, dict)]
+
+
+def proposal_attributes(vision: VisionCoordinator, proposal: dict[str, Any]) -> dict[str, Any]:
+    """What a proposal says, from the full proposal or the realtime summary: the action, a
+    summary of the drive steps, the model's confidence and situation, until when it can be
+    approved and the link to approve or reject it in MowDeck."""
+    assessment = proposal.get("assessment")
+    assessment = assessment if isinstance(assessment, dict) else {}
+    steps = _steps(proposal)
+    count = proposal.get("steps") if isinstance(proposal.get("steps"), int) else len(steps)
+    return {
+        "proposal_id": proposal.get("id"),
+        "task": proposal.get("task"),
+        "trigger": proposal.get("trigger"),
+        "round": proposal.get("round"),
+        "action": proposal.get("action"),
+        "fallback": proposal.get("fallback"),
+        "step_count": count,
+        "drive_seconds": round(sum(float(s.get("seconds") or 0) for s in steps), 1)
+        if steps
+        else None,
+        "steps": steps,
+        "confidence": proposal.get("confidence", assessment.get("confidence")),
+        "situation": proposal.get("situation", assessment.get("situation")),
+        "rationale": assessment.get("rationale"),
+        "detail": proposal.get("detail"),
+        "final": proposal.get("final"),
+        "expires_at": proposal.get("expires_at"),
+        "link": vision.absolute_link(proposal),
+    }
+
+
+class VisionSensor(MowDeckEntity, SensorEntity):
+    """The state of the mower's newest Vision proposal, with what it proposes. Approving or
+    rejecting it happens in MowDeck (the ``link`` attribute)."""
+
+    entity_description = SensorEntityDescription(
+        key="ai_recovery", device_class=SensorDeviceClass.ENUM, options=PROPOSAL_STATES
+    )
+
+    def __init__(
+        self, coordinator: MowDeckCoordinator, mower_id: str, vision: VisionCoordinator
+    ) -> None:
+        """Create the sensor."""
+        super().__init__(coordinator, mower_id, "ai_recovery", service=vision)
+        self._vision = vision
+
+    @property
+    def native_value(self) -> str | None:
+        """The proposal's state; unknown without a proposal."""
+        state = self._vision.proposal(self.mower_id).get("state")
+        return state if state in PROPOSAL_STATES else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """What the newest proposal says (nothing without one)."""
+        proposal = self._vision.proposal(self.mower_id)
+        return proposal_attributes(self._vision, proposal) if proposal else None
