@@ -188,6 +188,14 @@
       },
       "mow_path_spacing": {
         "name": "Bahnabstand"
+      },
+      "blade_threshold": {
+        "name": "Erinnerung Messerwechsel",
+        "state_attributes": {
+          "custom": {
+            "name": "Für diesen Mäher gesetzt"
+          }
+        }
       }
     },
     "select": {

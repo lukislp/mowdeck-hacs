@@ -344,3 +344,50 @@ async def test_diagnostics_redact_places_and_names(
         "can_manage_mowers",
     ]
     assert diagnostics["health"]["totals"][MOWER_ID]["mowing_hours"] == pytest.approx(40.0)
+
+
+THRESHOLD = "number.luba_blade_change_reminder"
+
+
+async def test_blade_change_reminder(
+    hass: HomeAssistant, fake_api: FakeMowDeck, config_entry: MockConfigEntry
+) -> None:
+    """With MowDeck 0.8 the reminder threshold is a number: it shows the threshold in effect
+    and sets the mower's own; a 403 names fleet.manage."""
+    fake_api.blade_thresholds = []
+    fake_api.health[MOWER_ID]["blade_hours_threshold_custom"] = False
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    number = hass.states.get(THRESHOLD)
+    assert number is not None
+    assert number.state == "50.0"
+    assert number.attributes["unit_of_measurement"] == "h"
+    assert number.attributes["custom"] is False
+
+    await hass.services.async_call(
+        "number", "set_value", {ATTR_ENTITY_ID: THRESHOLD, "value": 80}, blocking=True
+    )
+    assert fake_api.blade_thresholds == [{"hours": 80.0}]
+    number = hass.states.get(THRESHOLD)
+    assert number is not None
+    assert (number.state, number.attributes["custom"]) == ("80.0", True)
+
+    fake_api.relations = {"can_view", "can_control"}
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            "number", "set_value", {ATTR_ENTITY_ID: THRESHOLD, "value": 60}, blocking=True
+        )
+    assert err.value.translation_placeholders == {
+        "command": "blade_threshold",
+        "permission": "fleet.manage",
+    }
+    await hass.config_entries.async_unload(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+
+@pytest.mark.usefixtures("loaded_entry")
+async def test_no_blade_change_reminder_before_mowdeck_0_8(hass: HomeAssistant) -> None:
+    """A MowDeck whose health totals do not say whether the threshold is the mower's own
+    cannot set it per mower: no number."""
+    assert hass.states.get(THRESHOLD) is None
