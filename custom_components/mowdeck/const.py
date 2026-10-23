@@ -90,6 +90,8 @@ NOTIFICATION_KINDS: Final = [
 COMMAND_STATES: Final = ["pending", "accepted", "rejected", "executed", "expired", "failed"]
 
 ISSUE_REALTIME_UNAUTHORIZED: Final = "realtime_unauthorized"
+# MowDeck's API token page (the Repairs issues about the token link to it).
+TOKEN_PAGE: Final = "/settings/api-tokens"  # noqa: S105 - a web app path, not a secret
 # Repairs issue of a polled MowDeck service that answers 403 ("<service>_forbidden").
 ISSUE_FORBIDDEN: Final = "{service}_forbidden"
 

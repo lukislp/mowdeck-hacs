@@ -19,6 +19,7 @@ from .camera import storage_key as camera_storage_key
 from .const import CONF_API_TOKEN, DOMAIN
 from .coordinator import MowDeckCoordinator
 from .health import HealthCoordinator
+from .issues import IssueMonitor
 from .notifications import NotificationHub
 from .notifications import storage_key as notifications_storage_key
 from .realtime import RealtimeClient
@@ -105,6 +106,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> b
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(await IssueMonitor(hass, entry, coordinator).async_start())
 
     # Background tasks of an entry are cancelled when it unloads; stop() closes the socket.
     entry.async_create_background_task(hass, realtime.run(), f"{DOMAIN} realtime")

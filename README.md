@@ -65,7 +65,18 @@ The flow exchanges the token, reads `/api/v1/identity/me` and lists the mowers; 
 | Command results | pushed over the WebSocket | live |
 | Vision proposals | the newest per mower, polled, own coordinator; changes pushed over the WebSocket (`vision_proposal`) | every 10 minutes; live while the socket is up |
 
-Each MowDeck service has its own coordinator: when one fails, only its entities turn unavailable. When one answers "forbidden" (403), a Repairs issue names the permission the token lacks; it disappears with the next successful update.
+Each MowDeck service has its own coordinator: when one fails, only its entities turn unavailable. When one answers "forbidden" (403), a Repairs issue names the permission the token lacks and links to MowDeck's API token page (`/settings/api-tokens`); it disappears with the next successful update.
+
+## Repairs
+
+| Issue | When | Goes away |
+| --- | --- | --- |
+| MowDeck refuses the health data / the schedules (`<service>_forbidden`) | a polled service answers 403 | with the next successful update |
+| MowDeck live updates are refused (`realtime_unauthorized`) | the Realtime WebSocket refuses even a fresh access token | when the socket works again |
+| The MowDeck API token receives no notifications (`missing_permission_notifications_view`) | `GET /identity/me` lists no `notifications.view` for the token (asked at setup and every 10 minutes): the token lacks an account-wide `mower.view`, or it was created before MowDeck 0.7.0 | once the token in use holds `notifications.view` |
+| The Bluetooth bridge of *mower* needs a firmware update (`ble_bridge_outdated`) | the mower's state reports `links.ble_bridge.outdated` (with `outdated_reason`, the ESPHome and the bridge template version) | with the first state that reports current firmware |
+
+The token issues link to MowDeck's API token page, the bridge issue to the mower's page. All issues of an entry disappear when it is unloaded.
 
 ## Entities
 

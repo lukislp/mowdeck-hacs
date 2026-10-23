@@ -683,6 +683,14 @@
     "scheduler_forbidden": {
       "title": "MowDeck refuses the schedules",
       "description": "MowDeck at {url} answers the schedules or the rain decision with \"forbidden\" for this API token, so the schedule and rain entities are unavailable. Grant the permission {permission} (it follows mower.view) to the token in the MowDeck app. This message disappears with the next successful update."
+    },
+    "ble_bridge_outdated": {
+      "title": "The Bluetooth bridge of {mower} needs a firmware update",
+      "description": "MowDeck reports that the Bluetooth bridge of {mower} runs firmware older than MowDeck expects (reason: {reason}; ESPHome {esphome_version}, MowDeck bridge template {project_version}). Driving and spot runs over the bridge may fail until it is updated. Build and flash the bridge again from the current MowDeck bridge template (see the mower page in MowDeck). This message disappears once the bridge reports current firmware."
+    },
+    "missing_permission_notifications": {
+      "title": "The MowDeck API token receives no notifications",
+      "description": "The API token lacks the permission {permission}, so MowDeck pushes no notifications to Home Assistant and the notification entities stay silent. Grant mower.view on the whole account (not a site, group or mower) to the token at {url}. A token created before MowDeck 0.7.0 must be issued again with the same grants; enter the new token with Reconfigure on the integration. This message disappears once the token holds {permission} (checked every 10 minutes)."
     }
   },
   "services": {
