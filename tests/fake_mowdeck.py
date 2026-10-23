@@ -123,9 +123,11 @@ MOWER_STATE_FIELDS = frozenset(
 
 
 def notification(**overrides: Any) -> dict[str, Any]:
-    """An unread InboxItemOut of the test mower."""
+    """The ``notification`` of a Realtime ``notification`` message to an API token: an
+    account notification of the test mower (English, no inbox item behind it)."""
     item: dict[str, Any] = {
         "id": str(uuid.uuid4()),
+        "scope": "account",
         "kind": "mower_stuck",
         "severity": "critical",
         "title": "Luba is stuck",
@@ -279,9 +281,6 @@ class FakeMowDeck:
     schedule_patches: list[dict[str, Any]] = field(default_factory=list)
     weather: dict[str, dict[str, Any]] = field(default_factory=dict)
     weather_queries: list[dict[str, str]] = field(default_factory=list)
-    # Notifications: MowDeck answers 403 to API tokens (inbox_allowed False), like today.
-    inbox_allowed: bool = False
-    inbox: list[dict[str, Any]] = field(default_factory=list)
     daily: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     heatmap_queries: list[dict[str, str]] = field(default_factory=list)
     firmware_check_status: int | None = None
@@ -426,7 +425,6 @@ class FakeMowDeck:
         app.router.add_get(sched + "/{schedule_id}/runs", self._runs)
         app.router.add_get(sched + "/{schedule_id}/preview", self._preview)
         app.router.add_get("/api/v1/scheduler/weather/{mower_id}", self._weather)
-        app.router.add_get("/api/v1/notifications/inbox", self._inbox)
         app.router.add_put("/api/v1/fleet/mowers/{mower_id}/mow-defaults", self._mow_defaults)
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/health/daily", self._daily)
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/heatmap", self._heatmap)
@@ -687,13 +685,6 @@ class FakeMowDeck:
                 "to": now_iso(),
             }
         )
-
-    async def _inbox(self, request: web.Request) -> web.Response:
-        if not self.inbox_allowed:
-            return problem(403, "Forbidden", "notifications belong to users of an account")
-        assert request.query.get("unread") == "true"
-        items = [i for i in self.inbox if not i["read"]][: int(request.query.get("limit", "50"))]
-        return web.json_response({"items": items, "unread": len(items)})
 
     def _visible(self, request: web.Request) -> list[dict[str, Any]]:
         return self.mowers if self._account(request) == ACCOUNT_ID else []
@@ -973,6 +964,10 @@ class FakeMowDeck:
                 await ws.send_bytes(data)
             else:
                 await ws.send_str(data)
+
+    async def push_notification(self, item: dict[str, Any]) -> None:
+        """Push a notification like Realtime does for an API token."""
+        await self.push({"type": "notification", "notification": item})
 
     async def push_state(self, mower_id: str, state: dict[str, Any]) -> None:
         """Store a state and push it like Realtime does."""

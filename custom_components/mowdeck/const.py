@@ -30,10 +30,6 @@ STATIC_REFRESH: Final = timedelta(minutes=10)
 HEALTH_REFRESH: Final = timedelta(minutes=15)
 # Schedules, their runs and the rain decision; also refreshed right after schedule actions.
 SCHEDULER_REFRESH: Final = timedelta(minutes=5)
-# The inbox, polled while MowDeck pushes no notifications over the live connection; asked
-# again this rarely when MowDeck gives the token no inbox.
-INBOX_REFRESH: Final = timedelta(seconds=60)
-INBOX_RECHECK: Final = timedelta(hours=6)
 # A state older than this counts as offline (Telemetry's own stale flag also counts).
 STALE_AFTER: Final = timedelta(minutes=5)
 

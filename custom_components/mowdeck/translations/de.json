@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Mit MowDeck verbinden",
-        "description": "Gib die Adresse deiner MowDeck-Installation und ein API-Token ein, das in der MowDeck-App (Einstellungen, API-Tokens) mit den Berechtigungen mower.view und mower.control erstellt wurde.",
+        "description": "Gib die Adresse deiner MowDeck-Installation und ein API-Token ein, das in der MowDeck-App (Einstellungen, API-Tokens) mit den Berechtigungen mower.view und mower.control erstellt wurde. Vergib mower.view für das ganze Konto, damit MowDeck-Benachrichtigungen ankommen.",
         "data": {
           "url": "URL",
           "api_token": "API-Token"
