@@ -43,7 +43,8 @@ def problem(status: int, title: str, detail: str) -> web.Response:
 
 
 def mower_state(**overrides: Any) -> dict[str, Any]:
-    """A MowerState as Telemetry and Realtime deliver it."""
+    """A MowerState as Telemetry and Realtime deliver it: every field of the contract
+    (``MOWER_STATE_FIELDS``), a docked mower with RTK fix on Wi-Fi and no job."""
     state: dict[str, Any] = {
         "mower_id": MOWER_ID,
         "account_id": ACCOUNT_ID,
@@ -58,16 +59,67 @@ def mower_state(**overrides: Any) -> dict[str, Any]:
         "rtk_source": "base_station",
         "blade_height_mm": 50,
         "speed_mps": 0.0,
+        "drive_speed_mps": None,
         "position": {"lat": 48.137, "lon": 11.575, "heading": 90.0},
         "position_source": "rtk",
         "firmware": "sim-1.0",
+        "firmware_info": None,
         "light_on": False,
         "error_code": None,
         "error_message": None,
+        "error_category": None,
+        "drive_recoverable": False,
+        "job": None,
+        "gnss": {"satellites": 28, "correction_age_s": 1.0, "rtk_status": "fixed"},
+        "signal": {"wifi_dbm": -58, "mobile_dbm": None, "network": "wifi"},
+        "self_check": {"result": "ok", "detail": None},
+        "links": {},
+        "spot_run": None,
+        "turn_style": None,
+        "drive_calibration": None,
         "raw": {},
     }
     state.update(overrides)
     return state
+
+
+# The properties of MowerState in apps/web/openapi/telemetry.json of lukislp/mowdeck (v0.7.0).
+MOWER_STATE_FIELDS = frozenset(
+    {
+        "account_id",
+        "activity",
+        "battery_percent",
+        "blade_height_mm",
+        "charging",
+        "connected",
+        "connection",
+        "drive_calibration",
+        "drive_recoverable",
+        "drive_speed_mps",
+        "error_category",
+        "error_code",
+        "error_message",
+        "firmware",
+        "firmware_info",
+        "gnss",
+        "heartbeat_at",
+        "job",
+        "light_on",
+        "links",
+        "mower_id",
+        "observed_at",
+        "position",
+        "position_source",
+        "raw",
+        "rtk_fix",
+        "rtk_source",
+        "self_check",
+        "signal",
+        "speed_mps",
+        "spot_run",
+        "turn_style",
+    }
+)
 
 
 def notification(**overrides: Any) -> dict[str, Any]:

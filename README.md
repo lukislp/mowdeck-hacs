@@ -68,7 +68,7 @@ Each MowDeck service has its own coordinator: when one fails, only its entities 
 
 ## Entities
 
-Per mower one device (manufacturer Mammotion, model from the capabilities, firmware as software version, a link to the mower page of the web app):
+Per mower one device (manufacturer Mammotion, model from the capabilities, firmware as software version, a link to the mower page of the web app). The state sensors read only the typed fields of MowDeck's `MowerState`, never the adapter extras in `raw`; a field the mower's connection does not report stays unknown.
 
 | Entity | Example id | Source |
 | --- | --- | --- |
@@ -78,7 +78,13 @@ Per mower one device (manufacturer Mammotion, model from the capabilities, firmw
 | RTK fix, RTK source, Connection | `sensor.luba_rtk_fix`, ... | enums (diagnostic; RTK source and Connection are disabled by default) |
 | Blade height, Speed | `sensor.luba_blade_height`, `sensor.luba_speed` | whole mm; m/s with two decimals |
 | Last seen | `sensor.luba_last_seen` | `observed_at`, when the mower last reported values (diagnostic, disabled by default) |
-| Error code | `sensor.luba_error_code` | `error_code` with the attributes `error_message`, `error_category` (`trapped`, `obstacle`, `outside`, `wheel_slip`, `lift_tilt`, `collision`, `battery`, `blade_motor`, `rain`, `positioning`, `other`), `error_source` and `drive_recoverable` (diagnostic). Category and source come from the adapter's extras and are only set while an error code is |
+| Error code | `sensor.luba_error_code` | `error_code` with the attributes `error_message`, `error_category` and `drive_recoverable` (diagnostic) |
+| Error category | `sensor.luba_error_category` | `error_category` of the state, only while the activity is `error`: `trapped`, `obstacle`, `outside`, `wheel_slip`, `lift_tilt`, `collision`, `battery`, `blade_motor`, `rain`, `positioning`, `other` (unknown otherwise) |
+| Job progress, Current area, Job time elapsed, Job time remaining, Mowed area | `sensor.luba_job_progress`, `sensor.luba_current_area`, ... | the running job (`job` of the state): progress in %, the map area it works in (named as in MowDeck, attribute `area_id`), elapsed and remaining time (shown in minutes; Mammotion reports whole minutes), mowed m² of this job. Unknown while no job runs |
+| RTK status | `sensor.luba_rtk_status` | the receiver's solution (`gnss.rtk_status`): `none`, `single` (no corrections), `float`, `fixed` (diagnostic; finer than RTK fix, which folds `single` into `none`) |
+| Satellites, RTK correction age | `sensor.luba_satellites`, `sensor.luba_rtk_correction_age` | satellites in use and the age of the last RTK correction in s (diagnostic, disabled by default: they change with nearly every state) |
+| Wi-Fi signal, Mobile signal, Network | `sensor.luba_wi_fi_signal`, `sensor.luba_mobile_signal`, `sensor.luba_network` | the mower's own radio (`signal`): Wi-Fi and LTE in dBm (diagnostic, disabled by default) and its uplink `wifi`, `mobile`, `ble`, `none` (diagnostic) |
+| Self-check | `sensor.luba_self_check` | the mower's start self-check (`self_check`): `ok` or `blocked`, attribute `detail` with the reason (`rain`, `lifted`, `low_battery`, `outside_task_area`, `non_working_hours`, `rtk_not_ready`, `other_<n>`) |
 | Blade hours since change, Mowing hours, Distance driven, Battery cycles | `sensor.luba_blade_hours_since_change`, ... | MowDeck's health totals (`/telemetry/mowers/{id}/health`, refreshed every 15 minutes); blade hours follow the counter MowDeck shows (the mower's own or MowDeck's) with the attributes `threshold` (the reminder threshold of that counter) and `changed_at` (the last blade change recorded in MowDeck), distance in km; battery cycles are the mower's own lifetime counter when it reports one (attribute `source`: `device`, MowDeck's own count in `tracked_cycles`), MowDeck's count otherwise (`source`: `telemetry`) |
 | Bluetooth bridge signal | `sensor.luba_bluetooth_bridge_signal` | RSSI of the mower at the bridge in dBm (diagnostic, disabled by default); only for mowers whose connection supports a `ble_bridge` link |
 | Charging, Error | `binary_sensor.luba_charging`, `binary_sensor.luba_error` | |
