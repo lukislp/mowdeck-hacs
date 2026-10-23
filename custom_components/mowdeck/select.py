@@ -113,7 +113,8 @@ class AreaSelect(MowDeckEntity, SelectEntity, RestoreEntity):
         return AreaSelection(self.coordinator.area_selection.get(self.mower_id))
 
     async def async_added_to_hass(self) -> None:
-        """Restore the last selection (older versions stored only the selected label)."""
+        """Restore the last selection (older versions stored only the selected label); the
+        area switches, which may already be written, follow at once."""
         await super().async_added_to_hass()
         extra = await self.async_get_last_extra_data()
         if extra is not None and "area_ids" in extra.as_dict():
@@ -121,10 +122,12 @@ class AreaSelect(MowDeckEntity, SelectEntity, RestoreEntity):
             self.coordinator.area_selection[self.mower_id] = (
                 [str(a) for a in stored] if isinstance(stored, list) else None
             )
+            self.coordinator.async_update_listeners()
             return
         last = await self.async_get_last_state()
         if last is not None and last.state in self._labels():
             self.coordinator.area_selection[self.mower_id] = [self._labels()[last.state]]
+            self.coordinator.async_update_listeners()
 
 
 class PatternSelect(MowDeckEntity, SelectEntity):
