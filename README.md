@@ -27,7 +27,7 @@ In the MowDeck web app: **Settings, API tokens, New token**. Give it a name ("Ho
 | --- | --- |
 | `mower.view` | required: mowers, states, map, live updates, the cameras, the health totals, **Check firmware now**. **Grant it on the whole account** to receive MowDeck notifications: only an account-wide `mower.view` implies `notifications.view`, which MowDeck needs to push the account's notifications to a token |
 | `mower.control` | start, pause, dock, end job, blade height, mowing speed, light (without it Home Assistant is read only; the emergency stop works for viewers too) |
-| `mower.drive` | optional: the manual drive speed setting (the number is disabled by default) and **Start AI analysis** (Vision); also needed on a mower for its Vision notifications (`vision_proposal`, `vision_auto_proposal`) |
+| `mower.drive` | optional: the manual drive speed setting (the number is disabled by default), **Start AI analysis** (Vision) and `mowdeck.spot_mow` (together with `mower.control`, which the Planner needs); also needed on a mower for its Vision notifications (`vision_proposal`, `vision_auto_proposal`) |
 | `fleet.manage` | optional: installing a firmware update from the update entity, **Blade changed** |
 | `schedule.edit` | optional: the schedule switches and **Skip next run** buttons (together with `mower.control`, which **Run now** needs alone). Seeing schedules, the next mowing, the last run and the rain decision only needs `mower.view` (`scheduler.view` follows it) |
 
@@ -125,6 +125,8 @@ Per mower one device (manufacturer Mammotion, model from the capabilities, firmw
 | AI recovery | `sensor.luba_ai_recovery` | state of the mower's newest Vision proposal and what it proposes (see [Vision](#vision-ai-assist)) |
 | AI recovery image, AI recovery map | `image.luba_ai_recovery_image`, `image.luba_ai_recovery_map` | the camera frame the model saw and Vision's top-down map rendering (the map disabled by default) |
 | AI recovery (event) | `event.luba_ai_recovery` | fires `created` and `updated` for every proposal change |
+| Spot run | `sensor.luba_spot_run` | the spot run MowDeck drives (`spot_run` of the state): `preparing`, `undocking`, `waiting_rtk`, `transit`, `spot_mowing`, `paused_rtk`, `returning`, `stopping`, `done`, `aborted`, `failed` (kept until the next run); attributes `progress_percent`, `driven_points`, `planned_points`, `segment_index`, `segments_total`, `dry_run`, `reason`, `run_id`. Only for mowers MowDeck can drive (`manual_drive`) |
+| Stop spot run | `button.luba_stop_spot_run` | `spot_stop`: zero frame, blades off, the mower stays where it is. Only for mowers MowDeck can drive; needs `mower.control` |
 | Camera light | `switch.luba_camera_light` | the camera's headlamp: `light_on` of the state (unknown while not reported), `set_light`; only for mowers whose capabilities have `light` |
 
 **Start mowing** resumes a paused job; otherwise it starts the selected areas (area switches / Area select) in map order, with the mower's mowing defaults as pattern once they are saved in MowDeck (until then the mower's own defaults). With every area switch off, starting is refused.
@@ -216,6 +218,7 @@ Targets are MowDeck lawn mower entities.
 | `mowdeck.emergency_stop` | | `emergency_stop` |
 | `mowdeck.set_blade_height` | `mm` (10 to 120) | `set_blade_height` |
 | `mowdeck.set_speed` | `mps` (up to 2, sent with two decimals) | `set_speed` |
+| `mowdeck.spot_mow` | `latitude` and `longitude`, or `zone`; `radius` (0.5 to 3 m), `pattern` (`spiral`, `stripes`), `angle`, `speed` (0.1 to 0.3 m/s), `blades`, `confirm_blades`, `return_to_dock`, `turn_style` | plans the spot (`POST /planner/plans`), then `spot_mow`; optional response (see [Spot mowing](#spot-mowing)) |
 | `mowdeck.get_map` | | answers the current map (`GET /telemetry/mowers/{id}/map`) with `display_name` per area; response only |
 | `mowdeck.get_heatmap` | `layer` (`coverage`, `rtk`, `wifi`, `mnet`), `start`, `end` (default the last 7 days), `cell` (0.5, 1 or 2 m) | answers the heatmap layer (`GET /telemetry/mowers/{id}/heatmap`); response only |
 
@@ -235,6 +238,29 @@ target:
 data:
   layer: coverage
 response_variable: heatmap
+```
+
+## Spot mowing
+
+`mowdeck.spot_mow` mows a small circle the way the spot sheet of the MowDeck web app does ([ADR 0039](https://github.com/lukislp/mowdeck/blob/main/docs/adr/0039-spot-mowing-by-mowdeck-driven-paths.md)): MowDeck's Planner computes the route, then MowDeck's gateway drives the mower along it with joystick frames. The mower runs no job of its own, so this works on mowers that cannot follow custom paths (the LUBA), as long as MowDeck can drive them (`manual_drive`).
+
+- **Where:** `latitude` and `longitude`, or a `zone` (its centre; its radius unless `radius` is given). `radius` is 0.5 to 3 m (default 1.5 m), the web app's limits. The whole circle must lie inside one mapped area; the Planner keeps 0.4 m from its edge and from no-go zones.
+- **How:** `pattern` `spiral` (inward, default) or `stripes` at `angle`; `speed` 0.1 to 0.3 m/s (MowDeck's hard cap is 0.3); `turn_style` `in_place`, `arc` or `multi_point` (three-point turns need a drive link that reverses, else arcs; default: the mower's own setting); path spacing is the cutting width minus 5 cm.
+- **Blades:** off unless `blades` **and** `confirm_blades` are both true and the mower allows blades while MowDeck drives it (`manual_drive_blades`). `blades` without `confirm_blades` is refused, never silently turned into a dry run.
+- **When:** the mower must be idle with a fixed RTK position (or docked, when its connection can leave the dock by itself: the run undocks, then waits for RTK), with no job or spot run active and the battery above 20 %. The Planner must find a way to the spot. Home Assistant checks these first and names the one that fails; MowDeck's gateway checks them again (link, RTK and dead-man while driving).
+- **After:** with `return_to_dock` (default) the mower goes home after the run, also after an abort that left it healthy, never after a stop. `sensor.luba_spot_run` shows the progress, `button.luba_stop_spot_run` ends the run.
+- **Response** (optional): `command_id`, `area_id`, `blades`, `turn_style`, `estimated_duration_s`, `covered_area_m2`, `plan_hash`.
+- **Needs** `mower.control` (Planner) and `mower.drive` (`spot_mow`) on the mower and the plan feature `spot_mowing`.
+
+```yaml
+action: mowdeck.spot_mow
+target:
+  entity_id: lawn_mower.luba
+data:
+  zone: zone.flower_bed
+  radius: 1.5
+  pattern: spiral
+  speed: 0.2
 ```
 
 ## Troubleshooting

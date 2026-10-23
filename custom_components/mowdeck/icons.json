@@ -33,7 +33,8 @@
       "distance_today": { "default": "mdi:map-marker-path" },
       "jobs_today": { "default": "mdi:counter" },
       "online_time_today": { "default": "mdi:access-point" },
-      "ai_recovery": { "default": "mdi:robot-outline" }
+      "ai_recovery": { "default": "mdi:robot-outline" },
+      "spot_run": { "default": "mdi:target" }
     },
     "button": {
       "emergency_stop": { "default": "mdi:alert-octagon" },
@@ -43,7 +44,8 @@
       "blade_changed": { "default": "mdi:saw-blade" },
       "schedule_run_now": { "default": "mdi:play-circle-outline" },
       "schedule_skip_next": { "default": "mdi:skip-next-circle-outline" },
-      "start_ai_analysis": { "default": "mdi:robot-confused-outline" }
+      "start_ai_analysis": { "default": "mdi:robot-confused-outline" },
+      "stop_spot_run": { "default": "mdi:stop-circle" }
     },
     "number": {
       "blade_height": { "default": "mdi:arrow-expand-vertical" },
@@ -87,6 +89,7 @@
     "set_blade_height": { "service": "mdi:arrow-expand-vertical" },
     "set_speed": { "service": "mdi:speedometer" },
     "get_map": { "service": "mdi:map" },
-    "get_heatmap": { "service": "mdi:grid" }
+    "get_heatmap": { "service": "mdi:grid" },
+    "spot_mow": { "service": "mdi:target" }
   }
 }

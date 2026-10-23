@@ -135,6 +135,9 @@
       },
       "start_ai_analysis": {
         "name": "Start AI analysis"
+      },
+      "stop_spot_run": {
+        "name": "Stop spot run"
       }
     },
     "calendar": {
@@ -509,6 +512,48 @@
             "name": "Open in MowDeck"
           }
         }
+      },
+      "spot_run": {
+        "name": "Spot run",
+        "state": {
+          "preparing": "Preparing",
+          "undocking": "Leaving the dock",
+          "waiting_rtk": "Waiting for RTK",
+          "transit": "Driving to the spot",
+          "spot_mowing": "Mowing the spot",
+          "paused_rtk": "Paused, RTK lost",
+          "returning": "Returning",
+          "stopping": "Stopping",
+          "done": "Done",
+          "aborted": "Aborted",
+          "failed": "Failed"
+        },
+        "state_attributes": {
+          "run_id": {
+            "name": "Run ID"
+          },
+          "progress_percent": {
+            "name": "Progress"
+          },
+          "driven_points": {
+            "name": "Points reached"
+          },
+          "planned_points": {
+            "name": "Points planned"
+          },
+          "segment_index": {
+            "name": "Segment"
+          },
+          "segments_total": {
+            "name": "Segments"
+          },
+          "dry_run": {
+            "name": "Dry run (blades off)"
+          },
+          "reason": {
+            "name": "Reason"
+          }
+        }
       }
     },
     "switch": {
@@ -674,6 +719,39 @@
     },
     "no_map": {
       "message": "MowDeck has no map of this mower yet."
+    },
+    "spot_location": {
+      "message": "Give either latitude and longitude or a zone for the spot."
+    },
+    "spot_zone_unknown": {
+      "message": "The zone {zone} does not exist or has no position."
+    },
+    "spot_radius": {
+      "message": "The spot radius {radius} m is outside 0.5 to 3 m. Give a radius."
+    },
+    "spot_unsupported": {
+      "message": "MowDeck cannot drive this mower, so it cannot mow a spot."
+    },
+    "spot_blades_unconfirmed": {
+      "message": "Blades on needs confirm_blades as well. Without both the run is a dry run."
+    },
+    "spot_blades_unsupported": {
+      "message": "This mower does not allow its blades while MowDeck drives it. Leave the blades off for a dry run."
+    },
+    "spot_outside_areas": {
+      "message": "The spot does not lie completely inside one mapped area of the mower."
+    },
+    "spot_busy": {
+      "message": "The mower must be idle (or docked, where it can leave the dock by itself) with no job or spot run active."
+    },
+    "spot_battery": {
+      "message": "The battery must be above 20 % for a spot run."
+    },
+    "spot_rtk": {
+      "message": "The mower has no fixed RTK position. Wait for an RTK fix."
+    },
+    "spot_no_route": {
+      "message": "MowDeck found no way to the spot: {reason}"
     }
   },
   "issues": {
@@ -760,6 +838,56 @@
         "cell": {
           "name": "Cell size",
           "description": "Cell size in metres: 0.5, 1 or 2."
+        }
+      }
+    },
+    "spot_mow": {
+      "name": "Mow a spot",
+      "description": "Mows a circle around a point or around a zone's centre. MowDeck plans the run and drives the mower there itself; the blades stay off unless blades and confirm blades are both on.",
+      "fields": {
+        "latitude": {
+          "name": "Latitude",
+          "description": "Centre of the spot. Use with longitude, or use a zone instead."
+        },
+        "longitude": {
+          "name": "Longitude",
+          "description": "Centre of the spot."
+        },
+        "zone": {
+          "name": "Zone",
+          "description": "A zone whose centre is the spot's centre; its radius is used unless a radius is given."
+        },
+        "radius": {
+          "name": "Radius",
+          "description": "Radius of the spot, 0.5 to 3 m. Default 1.5 m (or the zone's radius)."
+        },
+        "pattern": {
+          "name": "Pattern",
+          "description": "spiral (inward) or stripes."
+        },
+        "angle": {
+          "name": "Stripe angle",
+          "description": "Angle of the stripes in degrees (stripes only)."
+        },
+        "speed": {
+          "name": "Speed",
+          "description": "Driving speed, 0.1 to 0.3 m/s."
+        },
+        "blades": {
+          "name": "Blades on",
+          "description": "Cut while driving. Needs confirm blades and a mower that allows blades while MowDeck drives it."
+        },
+        "confirm_blades": {
+          "name": "Confirm blades",
+          "description": "Confirms that the blades may run. Without it the run is a dry run."
+        },
+        "return_to_dock": {
+          "name": "Return to dock",
+          "description": "Send the mower home after the run (also after an abort that left it healthy, never after a stop)."
+        },
+        "turn_style": {
+          "name": "Turns",
+          "description": "How the run turns at lane ends: in_place, arc or multi_point (needs a drive link that reverses). Default: the mower's own setting."
         }
       }
     }

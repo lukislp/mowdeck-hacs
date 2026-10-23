@@ -135,6 +135,9 @@
       },
       "start_ai_analysis": {
         "name": "KI-Analyse starten"
+      },
+      "stop_spot_run": {
+        "name": "Punktmähen stoppen"
       }
     },
     "calendar": {
@@ -509,6 +512,48 @@
             "name": "In MowDeck öffnen"
           }
         }
+      },
+      "spot_run": {
+        "name": "Punktmähen",
+        "state": {
+          "preparing": "Wird vorbereitet",
+          "undocking": "Verlässt die Station",
+          "waiting_rtk": "Wartet auf RTK",
+          "transit": "Fährt zum Punkt",
+          "spot_mowing": "Mäht den Punkt",
+          "paused_rtk": "Pausiert, RTK verloren",
+          "returning": "Fährt zurück",
+          "stopping": "Hält an",
+          "done": "Fertig",
+          "aborted": "Abgebrochen",
+          "failed": "Fehlgeschlagen"
+        },
+        "state_attributes": {
+          "run_id": {
+            "name": "Lauf-ID"
+          },
+          "progress_percent": {
+            "name": "Fortschritt"
+          },
+          "driven_points": {
+            "name": "Erreichte Punkte"
+          },
+          "planned_points": {
+            "name": "Geplante Punkte"
+          },
+          "segment_index": {
+            "name": "Abschnitt"
+          },
+          "segments_total": {
+            "name": "Abschnitte"
+          },
+          "dry_run": {
+            "name": "Trockenlauf (Messer aus)"
+          },
+          "reason": {
+            "name": "Grund"
+          }
+        }
       }
     },
     "switch": {
@@ -674,6 +719,39 @@
     },
     "no_map": {
       "message": "MowDeck hat noch keine Karte dieses Mähroboters."
+    },
+    "spot_location": {
+      "message": "Gib für den Punkt entweder Breiten- und Längengrad oder eine Zone an."
+    },
+    "spot_zone_unknown": {
+      "message": "Die Zone {zone} gibt es nicht oder sie hat keine Position."
+    },
+    "spot_radius": {
+      "message": "Der Radius {radius} m liegt nicht zwischen 0,5 und 3 m. Gib einen Radius an."
+    },
+    "spot_unsupported": {
+      "message": "MowDeck kann diesen Mäher nicht fahren und daher keinen Punkt mähen."
+    },
+    "spot_blades_unconfirmed": {
+      "message": "Messer an braucht zusätzlich die Bestätigung. Ohne beides ist es ein Trockenlauf."
+    },
+    "spot_blades_unsupported": {
+      "message": "Dieser Mäher erlaubt keine Messer, während MowDeck ihn fährt. Lass die Messer für einen Trockenlauf aus."
+    },
+    "spot_outside_areas": {
+      "message": "Der Punkt liegt nicht vollständig in einem kartierten Bereich des Mähers."
+    },
+    "spot_busy": {
+      "message": "Der Mäher muss bereit sein (oder in der Station, wenn er sie selbst verlassen kann), ohne laufenden Auftrag oder Punktmähen."
+    },
+    "spot_battery": {
+      "message": "Für Punktmähen muss der Akku über 20 % liegen."
+    },
+    "spot_rtk": {
+      "message": "Der Mäher hat keine feste RTK-Position. Warte auf einen RTK-Fix."
+    },
+    "spot_no_route": {
+      "message": "MowDeck findet keinen Weg zum Punkt: {reason}"
     }
   },
   "issues": {
@@ -760,6 +838,56 @@
         "cell": {
           "name": "Zellgröße",
           "description": "Zellgröße in Metern: 0,5, 1 oder 2."
+        }
+      }
+    },
+    "spot_mow": {
+      "name": "Punkt mähen",
+      "description": "Mäht einen Kreis um einen Punkt oder um die Mitte einer Zone. MowDeck plant den Lauf und fährt den Mäher selbst; die Messer bleiben aus, außer Messer an und Bestätigung sind beide gesetzt.",
+      "fields": {
+        "latitude": {
+          "name": "Breitengrad",
+          "description": "Mitte des Punkts. Zusammen mit dem Längengrad, oder stattdessen eine Zone."
+        },
+        "longitude": {
+          "name": "Längengrad",
+          "description": "Mitte des Punkts."
+        },
+        "zone": {
+          "name": "Zone",
+          "description": "Eine Zone, deren Mitte die Mitte des Punkts ist; ihr Radius gilt, wenn kein Radius angegeben ist."
+        },
+        "radius": {
+          "name": "Radius",
+          "description": "Radius des Punkts, 0,5 bis 3 m. Standard 1,5 m (oder der Radius der Zone)."
+        },
+        "pattern": {
+          "name": "Muster",
+          "description": "spiral (nach innen) oder stripes (Streifen)."
+        },
+        "angle": {
+          "name": "Streifenwinkel",
+          "description": "Winkel der Streifen in Grad (nur Streifen)."
+        },
+        "speed": {
+          "name": "Geschwindigkeit",
+          "description": "Fahrgeschwindigkeit, 0,1 bis 0,3 m/s."
+        },
+        "blades": {
+          "name": "Messer an",
+          "description": "Beim Fahren mähen. Braucht die Bestätigung und einen Mäher, der Messer erlaubt, während MowDeck ihn fährt."
+        },
+        "confirm_blades": {
+          "name": "Messer bestätigen",
+          "description": "Bestätigt, dass die Messer laufen dürfen. Ohne ist es ein Trockenlauf."
+        },
+        "return_to_dock": {
+          "name": "Zur Station",
+          "description": "Den Mäher nach dem Lauf heimschicken (auch nach einem Abbruch, der ihn intakt ließ, nie nach einem Stopp)."
+        },
+        "turn_style": {
+          "name": "Wenden",
+          "description": "Wie der Lauf am Bahnende wendet: in_place, arc oder multi_point (braucht eine Fahrverbindung, die rückwärts fährt). Standard: die Einstellung des Mähers."
         }
       }
     }

@@ -13,8 +13,10 @@ from homeassistant.components.lawn_mower import (
 from homeassistant.core import HomeAssistant, ServiceResponse
 from homeassistant.exceptions import ServiceValidationError
 
+from . import spot
 from .const import DOMAIN, SPEED_DECIMALS
 from .entity import MowDeckEntity, async_add_mower_entities
+from .geo import from_wgs84
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -162,3 +164,121 @@ class MowDeckLawnMower(MowDeckEntity, LawnMowerEntity):
         await self.async_send_command(
             {"kind": "set_speed", "mps": round(float(mps), SPEED_DECIMALS)}
         )
+
+    async def async_spot_mow(
+        self,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        zone: str | None = None,
+        radius: float | None = None,
+        pattern: str = "spiral",
+        angle: float = 0.0,
+        speed: float = spot.SPEED_DEFAULT_MPS,
+        blades: bool = False,
+        confirm_blades: bool = False,
+        return_to_dock: bool = True,
+        turn_style: str | None = None,
+    ) -> ServiceResponse:
+        """``mowdeck.spot_mow``: mow a circle around a point or a zone's centre, as the web
+        app's spot sheet does: plan it with the Planner, then send ``spot_mow`` with the plan.
+
+        MowDeck drives the run itself (no job of the mower); the blades run only when
+        ``blades`` and ``confirm_blades`` are both set and the mower allows blades while
+        driving, otherwise it is a dry run. Progress shows in the spot run sensor."""
+        center, radius_m = self._spot_center(latitude, longitude, zone, radius)
+        caps = self.capabilities
+        if not caps.get("manual_drive"):
+            raise _invalid("spot_unsupported")
+        if blades and not confirm_blades:
+            raise _invalid("spot_blades_unconfirmed")
+        if blades and not caps.get("manual_drive_blades"):
+            raise _invalid("spot_blades_unsupported")
+        mower_map = self.coordinator.data.maps.get(self.mower_id) or {}
+        reference = mower_map.get("reference")
+        if not isinstance(reference, dict):
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="no_map")
+        polygon = spot.circle_polygon(from_wgs84(reference, *center), radius_m)
+        area_id = spot.containing_area(polygon, self.coordinator.areas(self.mower_id))
+        if area_id is None:
+            raise _invalid("spot_outside_areas")
+        state = self.mower_state
+        if (reason := spot.blocking_condition(state, caps)) is not None:
+            raise _invalid(reason)
+        style = spot.resolve_turn_style(
+            turn_style, state.get("turn_style"), bool(caps.get("drive_reverse"))
+        )
+        request = spot.plan_request(
+            mower_id=self.mower_id,
+            area_id=area_id,
+            polygon=polygon,
+            pattern=pattern,
+            angle_deg=float(angle),
+            speed_mps=round(float(speed), 2),
+            caps=caps,
+            turn_style=style,
+            transit=spot.transit_from(state, caps, reference),
+        )
+        plan = await self.async_call_api(
+            self.coordinator.client.create_plan(request), "spot_mow", "mower.control"
+        )
+        transit = plan.get("transit")
+        if isinstance(transit, dict) and not transit.get("found"):
+            raise _invalid("spot_no_route", reason=str(transit.get("reason") or ""))
+        run_blades = bool(blades and confirm_blades)
+        accepted = await self.async_send_command(
+            {
+                "kind": "spot_mow",
+                "plan": plan["spot_plan"],
+                "blades": run_blades,
+                "confirm_blades": run_blades,
+                "speed_mps": round(float(speed), 2),
+                "spot": {"center_wgs84": [center[0], center[1]], "radius_m": radius_m},
+                "turn_style": turn_style,
+                "return_to_dock": return_to_dock,
+            }
+        )
+        return {
+            "command_id": accepted.get("command_id"),
+            "area_id": area_id,
+            "blades": run_blades,
+            "turn_style": style,
+            "estimated_duration_s": plan.get("estimated_duration_s"),
+            "covered_area_m2": plan.get("covered_area_m2"),
+            "plan_hash": plan.get("plan_hash"),
+        }
+
+    def _spot_center(
+        self,
+        latitude: float | None,
+        longitude: float | None,
+        zone: str | None,
+        radius: float | None,
+    ) -> tuple[tuple[float, float], float]:
+        """The spot's centre and radius: a point (radius default 1.5 m) or a zone (its centre,
+        and its radius unless one is given; it must lie within 0.5 to 3 m)."""
+        if zone is not None and (latitude is not None or longitude is not None):
+            raise _invalid("spot_location")
+        if zone is not None:
+            found = self.hass.states.get(zone)
+            if found is None or "latitude" not in found.attributes:
+                raise _invalid("spot_zone_unknown", zone=zone)
+            center = (float(found.attributes["latitude"]), float(found.attributes["longitude"]))
+            if radius is None:
+                radius = float(found.attributes.get("radius") or 0)
+        elif latitude is not None and longitude is not None:
+            center = (float(latitude), float(longitude))
+        else:
+            raise _invalid("spot_location")
+        radius_m = spot.RADIUS_DEFAULT_M if radius is None else round(float(radius), 1)
+        if not spot.RADIUS_MIN_M <= radius_m <= spot.RADIUS_MAX_M:
+            raise _invalid("spot_radius", radius=f"{radius_m:g}")
+        return center, radius_m
+
+
+def _invalid(key: str, **placeholders: str) -> ServiceValidationError:
+    """A translated validation error of ``mowdeck.spot_mow``."""
+    return ServiceValidationError(
+        translation_domain=DOMAIN,
+        translation_key=key,
+        translation_placeholders=placeholders or None,
+    )
