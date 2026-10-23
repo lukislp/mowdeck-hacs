@@ -26,7 +26,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .api import MowDeckAuthError, MowDeckClient, MowDeckError
-from .const import DOMAIN, EVENT_COMMAND_RESULT, ISSUE_REALTIME_UNAUTHORIZED
+from .const import DOMAIN, EVENT_COMMAND_RESULT, ISSUE_REALTIME_UNAUTHORIZED, TOKEN_PAGE
 from .coordinator import MowDeckCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -277,6 +277,7 @@ class RealtimeClient:
             is_fixable=False,
             is_persistent=True,
             severity=ir.IssueSeverity.ERROR,
+            learn_more_url=f"{self._client.base_url}{TOKEN_PAGE}",
             translation_key=ISSUE_REALTIME_UNAUTHORIZED,
             translation_placeholders={"url": self._client.base_url},
         )

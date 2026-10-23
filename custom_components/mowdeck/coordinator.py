@@ -34,6 +34,7 @@ from .const import (
     RELATION_PERMISSION,
     STALE_AFTER,
     STATIC_REFRESH,
+    TOKEN_PAGE,
 )
 
 if TYPE_CHECKING:
@@ -416,6 +417,7 @@ class MowDeckServiceCoordinator[T](DataUpdateCoordinator[T]):
             self.issue_id,
             is_fixable=False,
             severity=ir.IssueSeverity.WARNING,
+            learn_more_url=f"{self.client.base_url}{TOKEN_PAGE}",
             translation_key=ISSUE_FORBIDDEN.format(service=self.service),
             translation_placeholders={
                 "url": self.client.base_url,

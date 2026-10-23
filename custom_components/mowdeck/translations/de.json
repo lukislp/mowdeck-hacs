@@ -547,6 +547,14 @@
     "scheduler_forbidden": {
       "title": "MowDeck verweigert die Zeitpläne",
       "description": "MowDeck unter {url} beantwortet die Zeitpläne oder die Regenentscheidung für dieses API-Token mit „verboten“, daher sind die Zeitplan- und Regen-Entitäten nicht verfügbar. Gib dem Token in der MowDeck-App die Berechtigung {permission} (sie folgt mower.view). Diese Meldung verschwindet mit der nächsten erfolgreichen Aktualisierung."
+    },
+    "ble_bridge_outdated": {
+      "title": "Die Bluetooth-Bridge von {mower} braucht ein Firmware-Update",
+      "description": "MowDeck meldet, dass die Bluetooth-Bridge von {mower} ältere Firmware nutzt, als MowDeck erwartet (Grund: {reason}; ESPHome {esphome_version}, MowDeck-Bridge-Vorlage {project_version}). Fahren und Punktmähen über die Bridge können fehlschlagen, bis sie aktualisiert ist. Baue und flashe die Bridge neu aus der aktuellen MowDeck-Bridge-Vorlage (siehe die Mäherseite in MowDeck). Diese Meldung verschwindet, sobald die Bridge aktuelle Firmware meldet."
+    },
+    "missing_permission_notifications": {
+      "title": "Das MowDeck-API-Token erhält keine Benachrichtigungen",
+      "description": "Dem API-Token fehlt die Berechtigung {permission}, deshalb schickt MowDeck keine Benachrichtigungen an Home Assistant und die Benachrichtigungs-Entitäten bleiben still. Gib dem Token unter {url} mower.view für das ganze Konto (nicht für einen Standort, eine Gruppe oder einen Mäher). Ein Token von vor MowDeck 0.7.0 muss mit denselben Berechtigungen neu ausgestellt werden; gib das neue Token über Neu konfigurieren an der Integration ein. Diese Meldung verschwindet, sobald das Token {permission} hat (geprüft alle 10 Minuten)."
     }
   },
   "services": {

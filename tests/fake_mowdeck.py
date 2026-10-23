@@ -498,7 +498,8 @@ class FakeMowDeck:
                 "display_name": "Home Assistant",
                 "username": None,
                 "roles": [],
-                "permissions": ["mower.view", "mower.control"],
+                # An account-wide mower.view implies notifications.view (MowDeck 0.7).
+                "permissions": ["mower.control", "mower.view", "notifications.view"],
                 "plan": None,
                 "session_id": None,
                 "memberships": [],
