@@ -34,7 +34,8 @@
       "jobs_today": { "default": "mdi:counter" },
       "online_time_today": { "default": "mdi:access-point" },
       "ai_recovery": { "default": "mdi:robot-outline" },
-      "spot_run": { "default": "mdi:target" }
+      "spot_run": { "default": "mdi:target" },
+      "missed_area": { "default": "mdi:texture-box" }
     },
     "button": {
       "emergency_stop": { "default": "mdi:alert-octagon" },
@@ -77,7 +78,12 @@
     },
     "image": {
       "ai_recovery_image": { "default": "mdi:camera-iris" },
-      "ai_recovery_map": { "default": "mdi:map-search-outline" }
+      "ai_recovery_map": { "default": "mdi:map-search-outline" },
+      "map": { "default": "mdi:map" },
+      "heatmap_coverage": { "default": "mdi:grid" },
+      "heatmap_rtk": { "default": "mdi:crosshairs-gps" },
+      "heatmap_wifi": { "default": "mdi:wifi" },
+      "heatmap_mnet": { "default": "mdi:signal-cellular-2" }
     },
     "calendar": {
       "mowing_schedule": { "default": "mdi:calendar-month" }

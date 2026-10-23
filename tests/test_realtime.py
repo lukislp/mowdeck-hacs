@@ -34,7 +34,8 @@ async def test_push_updates_sensor_without_polling(
     lawn = hass.states.get("lawn_mower.luba")
     assert lawn is not None
     assert lawn.state == "mowing"
-    assert fake_api.requests == requests_before
+    # Only the map image reads the running job's planned path.
+    assert [r for r in fake_api.requests if not r.endswith("/path")] == requests_before
 
 
 async def test_start_mowing_turns_mowing_by_push(

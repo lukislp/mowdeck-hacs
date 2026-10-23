@@ -19,6 +19,7 @@ from .camera import storage_key as camera_storage_key
 from .const import CONF_API_TOKEN, DOMAIN
 from .coordinator import MowDeckCoordinator
 from .health import HealthCoordinator
+from .heatmap import HeatmapCoordinator
 from .issues import IssueMonitor
 from .notifications import NotificationHub
 from .notifications import storage_key as notifications_storage_key
@@ -57,6 +58,7 @@ class MowDeckRuntimeData:
     scheduler: SchedulerCoordinator
     notifications: NotificationHub
     vision: VisionCoordinator
+    heatmap: HeatmapCoordinator
 
 
 type MowDeckConfigEntry = ConfigEntry[MowDeckRuntimeData]
@@ -99,8 +101,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> b
     await health.async_refresh()
     await scheduler.async_refresh()
     await vision.async_refresh()
+    # Heatmaps are slow queries: read in the background, their entities wait for them.
+    heatmap = HeatmapCoordinator(hass, entry, coordinator)
     entry.runtime_data = MowDeckRuntimeData(
-        client, coordinator, realtime, health, scheduler, notifications, vision
+        client, coordinator, realtime, health, scheduler, notifications, vision, heatmap
     )
     entry.async_on_unload(
         coordinator.async_add_listener(_device_updater(hass, entry.entry_id, coordinator))
@@ -111,6 +115,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> b
 
     # Background tasks of an entry are cancelled when it unloads; stop() closes the socket.
     entry.async_create_background_task(hass, realtime.run(), f"{DOMAIN} realtime")
+    entry.async_create_background_task(hass, heatmap.async_refresh(), f"{DOMAIN} heatmaps")
     entry.async_on_unload(realtime.stop)
     entry.async_on_unload(notifications.async_save)
     return True
