@@ -360,6 +360,9 @@ class FakeMowDeck:
     weather_queries: list[dict[str, str]] = field(default_factory=list)
     daily: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     heatmap_queries: list[dict[str, str]] = field(default_factory=list)
+    # Missed spots of the coverage layer, and the planned path of the running job per mower.
+    heatmap_gaps: list[dict[str, Any]] = field(default_factory=list)
+    paths: dict[str, dict[str, Any]] = field(default_factory=dict)
     # Vision (False: this MowDeck runs no Vision service, every path answers a plain 404).
     vision_enabled: bool = True
     proposals: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -524,6 +527,7 @@ class FakeMowDeck:
         app.router.add_put("/api/v1/fleet/mowers/{mower_id}/mow-defaults", self._mow_defaults)
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/health/daily", self._daily)
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/heatmap", self._heatmap)
+        app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/path", self._path)
         vision = "/api/v1/vision"
         app.router.add_post(vision + "/mowers/{mower_id}/recover", self._vision_recover)
         app.router.add_get(vision + "/mowers/{mower_id}/proposals", self._vision_list)
@@ -796,14 +800,21 @@ class FakeMowDeck:
         if mower_id not in self.maps:
             return problem(404, "Not found", "no-map-yet")
         self.heatmap_queries.append(dict(request.query))
+        layer = request.query["layer"]
+        kind = {"coverage": "ratio", "rtk": "fix"}.get(layer, "dbm")
+        value = {"ratio": 0.8, "fix": 0.95}.get(kind, -61.0)
         return web.json_response(
             {
                 "mower_id": mower_id,
-                "layer": request.query["layer"],
+                "layer": layer,
                 "cell_m": float(request.query.get("cell", "1")),
-                "cells": [{"x": 1, "y": 2, "n": 5, "value": 0.8}],
-                "gaps": [],
-                "legend": {"kind": "ratio", "min": 0, "max": 1},
+                "cells": [{"x": 1, "y": 2, "n": 5, "value": value}],
+                "gaps": self.heatmap_gaps if layer == "coverage" else [],
+                "legend": {
+                    "kind": kind,
+                    "min": 0 if kind != "dbm" else -61.0,
+                    "max": 1 if kind != "dbm" else -61.0,
+                },
                 "reference": {"origin_lat": 48.137, "origin_lon": 11.575, "rotation_deg": 0},
                 "samples": 5,
                 "truncated": False,
@@ -897,6 +908,19 @@ class FakeMowDeck:
                 "transit": transit,
                 "turn_style": body.get("turn_style"),
                 "warnings": [],
+            }
+        )
+
+    async def _path(self, request: web.Request) -> web.Response:
+        mower_id = request.match_info["mower_id"]
+        if mower_id not in self.paths:
+            return problem(404, "Not found", "no-path")
+        return web.json_response(
+            {
+                "mower_id": mower_id,
+                "path": self.paths[mower_id],
+                "observed_at": now_iso(),
+                "received_at": now_iso(),
             }
         )
 

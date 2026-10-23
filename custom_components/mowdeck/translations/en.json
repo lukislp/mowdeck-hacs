@@ -562,6 +562,20 @@
             "name": "Reason"
           }
         }
+      },
+      "missed_area": {
+        "name": "Missed area",
+        "state_attributes": {
+          "spots": {
+            "name": "Missed spots"
+          },
+          "from": {
+            "name": "From"
+          },
+          "to": {
+            "name": "To"
+          }
+        }
       }
     },
     "switch": {
@@ -673,6 +687,145 @@
       },
       "ai_recovery_map": {
         "name": "AI recovery map"
+      },
+      "map": {
+        "name": "Map"
+      },
+      "heatmap_coverage": {
+        "name": "Coverage heatmap",
+        "state_attributes": {
+          "from": {
+            "name": "From"
+          },
+          "to": {
+            "name": "To"
+          },
+          "cell_m": {
+            "name": "Cell size"
+          },
+          "legend": {
+            "name": "Legend",
+            "state": {
+              "ratio": "Share cut",
+              "fix": "Share with RTK fix",
+              "dbm": "Signal (dBm)"
+            }
+          },
+          "legend_min": {
+            "name": "Legend minimum"
+          },
+          "legend_max": {
+            "name": "Legend maximum"
+          },
+          "samples": {
+            "name": "Samples"
+          },
+          "truncated": {
+            "name": "Truncated"
+          }
+        }
+      },
+      "heatmap_rtk": {
+        "name": "RTK heatmap",
+        "state_attributes": {
+          "from": {
+            "name": "From"
+          },
+          "to": {
+            "name": "To"
+          },
+          "cell_m": {
+            "name": "Cell size"
+          },
+          "legend": {
+            "name": "Legend",
+            "state": {
+              "ratio": "Share cut",
+              "fix": "Share with RTK fix",
+              "dbm": "Signal (dBm)"
+            }
+          },
+          "legend_min": {
+            "name": "Legend minimum"
+          },
+          "legend_max": {
+            "name": "Legend maximum"
+          },
+          "samples": {
+            "name": "Samples"
+          },
+          "truncated": {
+            "name": "Truncated"
+          }
+        }
+      },
+      "heatmap_wifi": {
+        "name": "Wi-Fi heatmap",
+        "state_attributes": {
+          "from": {
+            "name": "From"
+          },
+          "to": {
+            "name": "To"
+          },
+          "cell_m": {
+            "name": "Cell size"
+          },
+          "legend": {
+            "name": "Legend",
+            "state": {
+              "ratio": "Share cut",
+              "fix": "Share with RTK fix",
+              "dbm": "Signal (dBm)"
+            }
+          },
+          "legend_min": {
+            "name": "Legend minimum"
+          },
+          "legend_max": {
+            "name": "Legend maximum"
+          },
+          "samples": {
+            "name": "Samples"
+          },
+          "truncated": {
+            "name": "Truncated"
+          }
+        }
+      },
+      "heatmap_mnet": {
+        "name": "Mobile network heatmap",
+        "state_attributes": {
+          "from": {
+            "name": "From"
+          },
+          "to": {
+            "name": "To"
+          },
+          "cell_m": {
+            "name": "Cell size"
+          },
+          "legend": {
+            "name": "Legend",
+            "state": {
+              "ratio": "Share cut",
+              "fix": "Share with RTK fix",
+              "dbm": "Signal (dBm)"
+            }
+          },
+          "legend_min": {
+            "name": "Legend minimum"
+          },
+          "legend_max": {
+            "name": "Legend maximum"
+          },
+          "samples": {
+            "name": "Samples"
+          },
+          "truncated": {
+            "name": "Truncated"
+          }
+        }
       }
     }
   },
@@ -782,6 +935,10 @@
     "missing_permission_notifications": {
       "title": "The MowDeck API token receives no notifications",
       "description": "The API token lacks the permission {permission}, so MowDeck pushes no notifications to Home Assistant and the notification entities stay silent. Grant mower.view on the whole account (not a site, group or mower) to the token at {url}. A token created before MowDeck 0.7.0 must be issued again with the same grants; enter the new token with Reconfigure on the integration. This message disappears once the token holds {permission} (checked every 10 minutes)."
+    },
+    "heatmap_forbidden": {
+      "title": "MowDeck refuses the heatmaps",
+      "description": "MowDeck at {url} answers the heatmaps with \"forbidden\" for this API token, so the heatmap images and the missed area are unavailable. Grant the permission {permission} to the token in the MowDeck app. This message disappears with the next successful update."
     }
   },
   "services": {

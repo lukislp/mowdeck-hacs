@@ -64,6 +64,8 @@ The flow exchanges the token, reads `/api/v1/identity/me` and lists the mowers; 
 | Notifications | pushed over the WebSocket (`notification` messages) | live; nothing is polled (see [Notifications](#notifications)) |
 | Command results | pushed over the WebSocket | live |
 | Vision proposals | the newest per mower, polled, own coordinator; changes pushed over the WebSocket (`vision_proposal`) | every 10 minutes; live while the socket is up |
+| Heatmap layers (missed area, heatmap images) | polled, own coordinator: the coverage layer of every mower, the other layers only while their image is enabled | every 30 minutes (a layer is a query over a week of positions) |
+| Planned path of the running job (map image) | polled while a job runs | at most every 30 s |
 
 Each MowDeck service has its own coordinator: when one fails, only its entities turn unavailable. When one answers "forbidden" (403), a Repairs issue names the permission the token lacks and links to MowDeck's API token page (`/settings/api-tokens`); it disappears with the next successful update.
 
@@ -71,7 +73,7 @@ Each MowDeck service has its own coordinator: when one fails, only its entities 
 
 | Issue | When | Goes away |
 | --- | --- | --- |
-| MowDeck refuses the health data / the schedules (`<service>_forbidden`) | a polled service answers 403 | with the next successful update |
+| MowDeck refuses the health data / the schedules / the heatmaps (`<service>_forbidden`) | a polled service answers 403 | with the next successful update |
 | MowDeck live updates are refused (`realtime_unauthorized`) | the Realtime WebSocket refuses even a fresh access token | when the socket works again |
 | The MowDeck API token receives no notifications (`missing_permission_notifications_view`) | `GET /identity/me` lists no `notifications.view` for the token (asked at setup and every 10 minutes): the token lacks an account-wide `mower.view`, or it was created before MowDeck 0.7.0 | once the token in use holds `notifications.view` |
 | The Bluetooth bridge of *mower* needs a firmware update (`ble_bridge_outdated`) | the mower's state reports `links.ble_bridge.outdated` (with `outdated_reason`, the ESPHome and the bridge template version) | with the first state that reports current firmware |
@@ -128,11 +130,24 @@ Per mower one device (manufacturer Mammotion, model from the capabilities, firmw
 | AI recovery (event) | `event.luba_ai_recovery` | fires `created` and `updated` for every proposal change |
 | Spot run | `sensor.luba_spot_run` | the spot run MowDeck drives (`spot_run` of the state): `preparing`, `undocking`, `waiting_rtk`, `transit`, `spot_mowing`, `paused_rtk`, `returning`, `stopping`, `done`, `aborted`, `failed` (kept until the next run); attributes `progress_percent`, `driven_points`, `planned_points`, `segment_index`, `segments_total`, `dry_run`, `reason`, `run_id`. Only for mowers MowDeck can drive (`manual_drive`) |
 | Stop spot run | `button.luba_stop_spot_run` | `spot_stop`: zero frame, blades off, the mower stays where it is. Only for mowers MowDeck can drive; needs `mower.control` |
+| Map | `image.luba_map` | the mower's map rendered as SVG in Home Assistant (see [Map and heatmaps](#map-and-heatmaps)); only for mowers with a map |
+| Coverage heatmap, RTK heatmap, Wi-Fi heatmap, Mobile network heatmap | `image.luba_coverage_heatmap`, `image.luba_rtk_heatmap`, `image.luba_wi_fi_heatmap`, `image.luba_mobile_network_heatmap` | a heatmap layer of the last 7 days as SVG; disabled by default (only an enabled one is read from MowDeck); attributes `from`, `to`, `cell_m`, `legend` (`ratio`, `fix`, `dbm`), `legend_min`, `legend_max`, `samples`, `truncated` |
+| Missed area | `sensor.luba_missed_area` | the area the blades missed in the last 7 days: the sum of the coverage layer's missed spots (`gaps[].area_m2`) in m², attributes `spots`, `from`, `to`; refreshed every 30 minutes |
 | Camera light | `switch.luba_camera_light` | the camera's headlamp: `light_on` of the state (unknown while not reported), `set_light`; only for mowers whose capabilities have `light` |
 
 **Start mowing** resumes a paused job; otherwise it starts the selected areas (area switches / Area select) in map order, with the mower's mowing defaults as pattern once they are saved in MowDeck (until then the mower's own defaults). With every area switch off, starting is refused.
 
 The event `mowdeck_command_result` carries every command status change (`mower_id`, `command_id`, `status`, `reason`); the entity `event.luba_command` fires with the status as event type (`pending`, `accepted`, `rejected`, `executed`, `expired`, `failed`) and `command_id` and `reason` as attributes.
+
+## Map and heatmaps
+
+The pictures are rendered in Home Assistant as SVG from MowDeck's data, without any extra package, in MowDeck's colours, north up, in the map's local metres:
+
+- **`image.luba_map`**: mapped areas (green), no-go zones (red), obstacles (grey), transfer paths (dashed), the dock (blue square with its heading), the mower (an arrow in its heading, a dot without one) and, while a job runs, its planned path from `GET /telemetry/mowers/{id}/path`: the mowed part solid, the rest faint. It is rendered again only when what it shows changes (map revision, the mower's position to 25 cm or its heading to 5°, the path or its progress) and at most every 10 s; the path is read at most every 30 s while a job runs.
+- **Heatmap images** (disabled by default): the layers of `GET /telemetry/mowers/{id}/heatmap` over the last 7 days, one square per cell, coloured like the web app's legend: coverage in five steps from grey (never cut) to green (always cut) with the missed spots outlined in red, RTK by the share of fixed positions (red below 50 %, amber below 90 %, green), Wi-Fi and mobile network from red (-90 dBm) through amber to green (-40 dBm).
+- **`sensor.luba_missed_area`**: the missed spots' area in m².
+
+Image entities show in a picture entity card or a picture glance card. Every image keeps its picture until its content changes, so a dashboard only fetches a new one after a change.
 
 ## Notifications
 
@@ -275,6 +290,7 @@ data:
 - **Camera stays black or "connecting"**: the browser does not reach the relay's media port. Check from the same device that `RELAY_ICE_HOSTS` contains an address it can reach and that port 8189 (UDP and TCP) is open on the MowDeck host; the MowDeck web app on that device shows the same problem then.
 - **"The mower's camera did not start in time"**: the mower did not publish within 40 s (4G gaps, a sleeping mower that wakes slowly). Open the camera again.
 - **"MowDeck refuses the mower health data" (Repairs)**: the health totals answer 403 for the token. Grant the named permission; the issue disappears with the next update (every 15 minutes).
+- **"MowDeck refuses the heatmaps" (Repairs)**: the heatmap layers answer 403 for the token; grant `mower.view`. The map image keeps working, the heatmap images and the missed area are unavailable until the next successful update.
 - **"MowDeck refuses the schedules" (Repairs)**: the Scheduler answers 403; grant `mower.view` (or `scheduler.view`) to the token. A MowDeck without the Scheduler simply shows no schedule or rain entities.
 - **No schedule switch or skip button**: the token lacks `schedule.edit` (or `mower.control`) on the schedule's mower or group; MowDeck is asked every 5 minutes, so new grants show up without a restart.
 - **Diagnostics** (three dots on the entry) contain mowers, states, capabilities, the token's permissions per mower, the health totals and the realtime status; the API token, connection options, serials, vendor ids, positions and all coordinates are redacted, and maps are reduced to counts (no area names or boundaries).

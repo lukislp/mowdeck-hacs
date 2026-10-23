@@ -289,7 +289,7 @@ async def test_get_heatmap(hass: HomeAssistant, fake_api: FakeMowDeck) -> None:
     answer: Any = response[MOWER]
     assert isinstance(answer, dict)
     assert answer["layer"] == "rtk"
-    query = fake_api.heatmap_queries[0]
+    [query] = [q for q in fake_api.heatmap_queries if q["layer"] == "rtk"]
     assert query["layer"] == "rtk"
     assert query["cell"] == "2.0"
     assert query["from"].startswith("2026-10-01T00:00:00")

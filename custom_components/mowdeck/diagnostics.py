@@ -93,6 +93,18 @@ async def async_get_config_entry_diagnostics(
                 for mower_id, proposal in runtime.vision.data.proposals.items()
             },
         },
+        "heatmap": {
+            "last_update_success": runtime.heatmap.last_update_success,
+            "forbidden": runtime.heatmap.forbidden,
+            "layers": {
+                f"{mower_id} {layer}": {
+                    "cells": len(data.get("cells") or []),
+                    "gaps": len(data.get("gaps") or []),
+                    "samples": data.get("samples"),
+                }
+                for (mower_id, layer), data in runtime.heatmap.data.layers.items()
+            },
+        },
         "notifications": {
             "received": runtime.notifications.received,
             "delivered": runtime.notifications.delivered_count,

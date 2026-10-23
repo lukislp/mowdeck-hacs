@@ -32,6 +32,12 @@ HEALTH_REFRESH: Final = timedelta(minutes=15)
 SCHEDULER_REFRESH: Final = timedelta(minutes=5)
 # The newest Vision proposal per mower; changes arrive live over the WebSocket.
 VISION_REFRESH: Final = timedelta(minutes=10)
+# Heatmap layers are a query over a week of positions: refreshed rarely.
+HEATMAP_REFRESH: Final = timedelta(minutes=30)
+# The map image is rendered again at most this often, and the running job's path is read at
+# most this often.
+MAP_MIN_INTERVAL: Final = timedelta(seconds=10)
+PATH_REFRESH: Final = timedelta(seconds=30)
 # A state older than this counts as offline (Telemetry's own stale flag also counts).
 STALE_AFTER: Final = timedelta(minutes=5)
 
