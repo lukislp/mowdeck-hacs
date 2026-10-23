@@ -2,12 +2,13 @@
 
 Protocol (services/realtime/README.md in the monorepo): send ``auth`` with an access token as
 the first message, wait for ``ready``, ``subscribe`` to the mower ids, then receive ``state``,
-``command_result``, ``notification`` and ``revoked`` messages (``notification`` carries the
-account's notifications to API tokens with ``notifications.view``; they go to the notification
-hub). Before the access token expires a fresh one is sent with another ``auth``. The socket
-reconnects with exponential backoff; close code 4401 (unauthorized) triggers a token refresh,
-and when even a fresh token is refused (or the API token itself is rejected) a Repairs issue
-is raised that stays until a connection succeeds.
+``command_result``, ``notification``, ``vision_proposal`` and ``revoked`` messages
+(``notification`` carries the account's notifications to API tokens with
+``notifications.view``; they go to the notification hub). Before the access token expires a
+fresh one is sent with another ``auth``. The socket reconnects with exponential backoff;
+close code 4401 (unauthorized) triggers a token refresh, and when even a fresh token is
+refused (or the API token itself is rejected) a Repairs issue is raised that stays until a
+connection succeeds.
 """
 
 from __future__ import annotations
@@ -69,6 +70,7 @@ class RealtimeClient:
         entry_id: str,
         on_auth_failed: Callable[[], None],
         on_notification: Callable[[Any], None] | None = None,
+        on_vision_proposal: Callable[[dict[str, Any]], None] | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         """Create the runner; ``run`` connects."""
@@ -78,6 +80,7 @@ class RealtimeClient:
         self._entry_id = entry_id
         self._on_auth_failed = on_auth_failed
         self._on_notification = on_notification
+        self._on_vision_proposal = on_vision_proposal
         self._sleep = sleep
         self._ws: aiohttp.ClientWebSocketResponse | None = None
         self._subscribed: set[str] = set()
@@ -230,6 +233,8 @@ class RealtimeClient:
                     )
             elif kind == "notification" and self._on_notification is not None:
                 self._on_notification(message.get("notification"))
+            elif kind == "vision_proposal" and self._on_vision_proposal is not None:
+                self._on_vision_proposal(message)
             elif kind == "revoked":
                 mower_ids = [str(m) for m in message.get("mower_ids", [])]
                 self._subscribed -= set(mower_ids)
