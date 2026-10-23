@@ -509,6 +509,14 @@ class MowDeckClient:
             return None
         return dict(body) if body is not None else None
 
+    async def get_path(self, mower_id: str) -> dict[str, Any] | None:
+        """``GET /telemetry/mowers/{id}/path``: the route of the running job with its progress
+        (``MowPathOut``); None without a job or before the route arrived (404 ``no-path``)."""
+        try:
+            return dict(await self._request("GET", f"{TELEMETRY}/mowers/{mower_id}/path"))
+        except MowDeckNotFoundError:
+            return None
+
     async def get_health(self, mower_id: str) -> dict[str, Any] | None:
         """``GET /telemetry/mowers/{id}/health``: running totals; None before any telemetry."""
         try:

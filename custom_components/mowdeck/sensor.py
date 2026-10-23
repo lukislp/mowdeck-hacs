@@ -37,6 +37,7 @@ from .const import (
     SPEED_DECIMALS,
 )
 from .entity import MowDeckEntity, async_add_mower_entities
+from .heatmap import COVERAGE, missed_area
 from .scheduler import parse_time
 from .spot import RUN_STATES
 from .vision import PROPOSAL_STATES
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
     from . import MowDeckConfigEntry
     from .coordinator import MowDeckCoordinator
     from .health import HealthCoordinator
+    from .heatmap import HeatmapCoordinator
     from .scheduler import SchedulerCoordinator
     from .vision import VisionCoordinator
 
@@ -522,6 +524,16 @@ async def async_setup_entry(
         ),
         domain=Platform.SENSOR,
     )
+    heatmap = entry.runtime_data.heatmap
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, m: (
+            [MissedAreaSensor(coordinator, m, heatmap)] if coordinator.data.maps.get(m) else []
+        ),
+        domain=Platform.SENSOR,
+        fingerprint=lambda m: bool(entry.runtime_data.coordinator.data.maps.get(m)),
+    )
     scheduler = entry.runtime_data.scheduler
     async_add_mower_entities(
         entry,
@@ -794,3 +806,41 @@ class SpotRunSensor(MowDeckEntity, SensorEntity):
         keys: tuple[str, ...] = ("run_id", "progress_percent", "driven_points")
         keys += ("planned_points", "segment_index", "segments_total", "dry_run", "reason")
         return {key: run.get(key) for key in keys}
+
+
+class MissedAreaSensor(MowDeckEntity, SensorEntity):
+    """The area the blades missed in the last 7 days: the sum of the coverage layer's gaps
+    (``MowerHeatmap.gaps[].area_m2``), refreshed with the heatmaps."""
+
+    entity_description = SensorEntityDescription(
+        key="missed_area",
+        device_class=SensorDeviceClass.AREA,
+        native_unit_of_measurement=UnitOfArea.SQUARE_METERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+    )
+
+    def __init__(
+        self, coordinator: MowDeckCoordinator, mower_id: str, heatmap: HeatmapCoordinator
+    ) -> None:
+        """Create the sensor."""
+        super().__init__(coordinator, mower_id, "missed_area", service=heatmap)
+        self._heatmap = heatmap
+
+    @property
+    def native_value(self) -> float | None:
+        """Square metres missed; unknown before the coverage layer was read."""
+        layer = self._heatmap.layer(self.mower_id, COVERAGE)
+        return round(missed_area(layer), 1) if layer is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """How many spots and over which range."""
+        layer = self._heatmap.layer(self.mower_id, COVERAGE)
+        if layer is None:
+            return None
+        return {
+            "spots": len(layer.get("gaps") or []),
+            "from": layer.get("from"),
+            "to": layer.get("to"),
+        }

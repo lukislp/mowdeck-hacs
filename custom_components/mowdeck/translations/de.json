@@ -554,6 +554,20 @@
             "name": "Grund"
           }
         }
+      },
+      "missed_area": {
+        "name": "Verpasste Fläche",
+        "state_attributes": {
+          "spots": {
+            "name": "Verpasste Stellen"
+          },
+          "from": {
+            "name": "Von"
+          },
+          "to": {
+            "name": "Bis"
+          }
+        }
       }
     },
     "switch": {
@@ -665,6 +679,145 @@
       },
       "ai_recovery_map": {
         "name": "KI-Befreiung Karte"
+      },
+      "map": {
+        "name": "Karte"
+      },
+      "heatmap_coverage": {
+        "name": "Heatmap Abdeckung",
+        "state_attributes": {
+          "from": {
+            "name": "Von"
+          },
+          "to": {
+            "name": "Bis"
+          },
+          "cell_m": {
+            "name": "Zellgröße"
+          },
+          "legend": {
+            "name": "Legende",
+            "state": {
+              "ratio": "Gemähter Anteil",
+              "fix": "Anteil mit RTK-Fix",
+              "dbm": "Signal (dBm)"
+            }
+          },
+          "legend_min": {
+            "name": "Legende Minimum"
+          },
+          "legend_max": {
+            "name": "Legende Maximum"
+          },
+          "samples": {
+            "name": "Messpunkte"
+          },
+          "truncated": {
+            "name": "Gekürzt"
+          }
+        }
+      },
+      "heatmap_rtk": {
+        "name": "Heatmap RTK",
+        "state_attributes": {
+          "from": {
+            "name": "Von"
+          },
+          "to": {
+            "name": "Bis"
+          },
+          "cell_m": {
+            "name": "Zellgröße"
+          },
+          "legend": {
+            "name": "Legende",
+            "state": {
+              "ratio": "Gemähter Anteil",
+              "fix": "Anteil mit RTK-Fix",
+              "dbm": "Signal (dBm)"
+            }
+          },
+          "legend_min": {
+            "name": "Legende Minimum"
+          },
+          "legend_max": {
+            "name": "Legende Maximum"
+          },
+          "samples": {
+            "name": "Messpunkte"
+          },
+          "truncated": {
+            "name": "Gekürzt"
+          }
+        }
+      },
+      "heatmap_wifi": {
+        "name": "Heatmap WLAN",
+        "state_attributes": {
+          "from": {
+            "name": "Von"
+          },
+          "to": {
+            "name": "Bis"
+          },
+          "cell_m": {
+            "name": "Zellgröße"
+          },
+          "legend": {
+            "name": "Legende",
+            "state": {
+              "ratio": "Gemähter Anteil",
+              "fix": "Anteil mit RTK-Fix",
+              "dbm": "Signal (dBm)"
+            }
+          },
+          "legend_min": {
+            "name": "Legende Minimum"
+          },
+          "legend_max": {
+            "name": "Legende Maximum"
+          },
+          "samples": {
+            "name": "Messpunkte"
+          },
+          "truncated": {
+            "name": "Gekürzt"
+          }
+        }
+      },
+      "heatmap_mnet": {
+        "name": "Heatmap Mobilfunk",
+        "state_attributes": {
+          "from": {
+            "name": "Von"
+          },
+          "to": {
+            "name": "Bis"
+          },
+          "cell_m": {
+            "name": "Zellgröße"
+          },
+          "legend": {
+            "name": "Legende",
+            "state": {
+              "ratio": "Gemähter Anteil",
+              "fix": "Anteil mit RTK-Fix",
+              "dbm": "Signal (dBm)"
+            }
+          },
+          "legend_min": {
+            "name": "Legende Minimum"
+          },
+          "legend_max": {
+            "name": "Legende Maximum"
+          },
+          "samples": {
+            "name": "Messpunkte"
+          },
+          "truncated": {
+            "name": "Gekürzt"
+          }
+        }
       }
     }
   },
@@ -774,6 +927,10 @@
     "missing_permission_notifications": {
       "title": "Das MowDeck-API-Token erhält keine Benachrichtigungen",
       "description": "Dem API-Token fehlt die Berechtigung {permission}, deshalb schickt MowDeck keine Benachrichtigungen an Home Assistant und die Benachrichtigungs-Entitäten bleiben still. Gib dem Token unter {url} mower.view für das ganze Konto (nicht für einen Standort, eine Gruppe oder einen Mäher). Ein Token von vor MowDeck 0.7.0 muss mit denselben Berechtigungen neu ausgestellt werden; gib das neue Token über Neu konfigurieren an der Integration ein. Diese Meldung verschwindet, sobald das Token {permission} hat (geprüft alle 10 Minuten)."
+    },
+    "heatmap_forbidden": {
+      "title": "MowDeck verweigert die Heatmaps",
+      "description": "MowDeck unter {url} beantwortet die Heatmaps für dieses API-Token mit „verboten“, daher sind die Heatmap-Bilder und die verpasste Fläche nicht verfügbar. Gib dem Token in der MowDeck-App die Berechtigung {permission}. Diese Meldung verschwindet mit der nächsten erfolgreichen Aktualisierung."
     }
   },
   "services": {
