@@ -86,8 +86,7 @@ async def async_get_config_entry_diagnostics(
             "permissions": {k: sorted(v) for k, v in runtime.scheduler.data.permissions.items()},
         },
         "notifications": {
-            "inbox": runtime.notifications.data.inbox,
-            "realtime": runtime.notifications.data.realtime,
+            "received": runtime.notifications.received,
             "delivered": runtime.notifications.delivered_count,
         },
     }

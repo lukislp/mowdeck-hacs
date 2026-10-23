@@ -19,7 +19,7 @@ from .camera import storage_key as camera_storage_key
 from .const import CONF_API_TOKEN, DOMAIN
 from .coordinator import MowDeckCoordinator
 from .health import HealthCoordinator
-from .notifications import NotificationCoordinator
+from .notifications import NotificationHub
 from .notifications import storage_key as notifications_storage_key
 from .realtime import RealtimeClient
 from .scheduler import SchedulerCoordinator
@@ -51,7 +51,7 @@ class MowDeckRuntimeData:
     realtime: RealtimeClient
     health: HealthCoordinator
     scheduler: SchedulerCoordinator
-    notifications: NotificationCoordinator
+    notifications: NotificationHub
 
 
 type MowDeckConfigEntry = ConfigEntry[MowDeckRuntimeData]
@@ -78,7 +78,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> b
 
     health = HealthCoordinator(hass, entry, coordinator)
     scheduler = SchedulerCoordinator(hass, entry, coordinator)
-    notifications = NotificationCoordinator(hass, entry, coordinator)
+    notifications = NotificationHub(hass, entry, coordinator)
     await notifications.async_load()
     realtime = RealtimeClient(
         hass,
@@ -91,7 +91,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> b
     # The further services never block the setup; their entities wait for them.
     await health.async_refresh()
     await scheduler.async_refresh()
-    await notifications.async_refresh()
     entry.runtime_data = MowDeckRuntimeData(
         client, coordinator, realtime, health, scheduler, notifications
     )
@@ -104,6 +103,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> b
     # Background tasks of an entry are cancelled when it unloads; stop() closes the socket.
     entry.async_create_background_task(hass, realtime.run(), f"{DOMAIN} realtime")
     entry.async_on_unload(realtime.stop)
+    entry.async_on_unload(notifications.async_save)
     return True
 
 

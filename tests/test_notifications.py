@@ -1,5 +1,5 @@
-"""Notifications (inbox polling, realtime push, event entity, bus event, persistent
-notifications, logbook) and the command event entity."""
+"""Notifications (realtime push, event entity, bus event, persistent notifications, logbook)
+and the command event entity."""
 
 from __future__ import annotations
 
@@ -21,9 +21,9 @@ from custom_components.mowdeck.const import (
     DOMAIN,
     EVENT_COMMAND_RESULT,
     EVENT_NOTIFICATION,
-    INBOX_RECHECK,
 )
 from custom_components.mowdeck.diagnostics import async_get_config_entry_diagnostics
+from custom_components.mowdeck.notifications import SEEN_LIMIT
 
 from .conftest import wait_for
 from .fake_mowdeck import MOWER_ID, FakeMowDeck, notification
@@ -39,123 +39,108 @@ def state_of(hass: HomeAssistant, entity_id: str) -> Any:
     return state
 
 
-async def setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
-    """Set the entry up and wait for the socket."""
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-
-
-async def teardown(hass: HomeAssistant, entry: MockConfigEntry) -> None:
-    """Unload the entry (closes the socket)."""
-    await hass.config_entries.async_unload(entry.entry_id)
-    await hass.async_block_till_done()
-
-
-async def poll(hass: HomeAssistant, entry: MockConfigEntry) -> None:
-    """Poll the inbox now."""
-    await entry.runtime_data.notifications.async_refresh()
-    await hass.async_block_till_done()
-
-
-async def test_api_token_without_inbox(
+async def test_notification_entity_without_inbox(
     hass: HomeAssistant,
     fake_api: FakeMowDeck,
     loaded_entry: MockConfigEntry,
     issue_registry: ir.IssueRegistry,
 ) -> None:
-    """MowDeck refuses API tokens an inbox: no notification entity, no Repairs issue, the
-    inbox is asked again only rarely."""
-    notifications = loaded_entry.runtime_data.notifications
-    assert notifications.data.inbox is False
-    assert notifications.update_interval == INBOX_RECHECK
-    assert hass.states.get(NOTIFICATION) is None
-    assert notifications.last_update_success
+    """The notification entity exists from the start; the inbox (which MowDeck refuses API
+    tokens) is never asked and no Repairs issue appears."""
+    assert state_of(hass, NOTIFICATION).state == "unknown"
+    assert not [r for r in fake_api.requests if "/notifications/" in r]
     assert not [i for i in issue_registry.issues.values() if i.domain == DOMAIN]
 
 
-async def test_inbox_notifications(
-    hass: HomeAssistant, fake_api: FakeMowDeck, config_entry: MockConfigEntry
+async def test_realtime_notifications(
+    hass: HomeAssistant, fake_api: FakeMowDeck, loaded_entry: MockConfigEntry
 ) -> None:
-    """With an inbox: the backlog stays quiet, new notifications fire once on the event
-    entity and the bus; others only on the bus."""
-    fake_api.inbox_allowed = True
-    fake_api.inbox = [notification(kind="battery_low", severity="warning")]
+    """Account notifications fire once on the event entity and the bus; kinds this version
+    does not know and notifications without a mower only on the bus; garbage is dropped."""
     events: list[Event] = async_capture_events(hass, EVENT_NOTIFICATION)
-    await setup(hass, config_entry)
-    assert state_of(hass, NOTIFICATION).state == "unknown"
-    assert events == []
-
     stuck = notification()
-    fake_api.inbox.insert(0, stuck)
-    fake_api.inbox.insert(0, notification(kind="brand_new_kind", severity="info"))
-    fake_api.inbox.insert(0, notification(kind="test", mower_id=None, severity="info"))
-    await poll(hass, config_entry)
-    await poll(hass, config_entry)
+    await fake_api.push_notification(stuck)
+    await fake_api.push_notification(stuck)
+    await fake_api.push({"type": "notification", "notification": "garbage"})
+    await fake_api.push({"type": "notification", "notification": {"kind": "test"}})
+    await fake_api.push_notification(notification(kind="brand_new_kind", severity="info"))
+    await fake_api.push_notification(notification(kind="test", mower_id=None, severity="info"))
+    await wait_for(hass, lambda: len(events) == 3)
     assert [e.data["kind"] for e in events] == ["mower_stuck", "brand_new_kind", "test"]
     assert events[0].data["mower_name"] == "Luba"
     assert events[0].data["notification_id"] == stuck["id"]
+    assert events[0].data["scope"] == "account"
+    assert events[0].data["config_entry_id"] == loaded_entry.entry_id
+    assert events[2].data["mower_id"] is None
     entity = state_of(hass, NOTIFICATION)
     assert entity.attributes["event_type"] == "mower_stuck"
     assert entity.attributes["severity"] == "critical"
     assert entity.attributes["title"] == "Luba is stuck"
+    assert entity.attributes["scope"] == "account"
+    assert entity.attributes["notification_id"] == stuck["id"]
     # Off by default: no persistent notification.
     assert persistent_notification._async_get_or_create_notifications(hass) == {}
-    await teardown(hass, config_entry)
+
+    second = notification(kind="mowing_finished", severity="info")
+    await fake_api.push_notification(second)
+    await wait_for(hass, lambda: len(events) == 4)
+    assert state_of(hass, NOTIFICATION).attributes["event_type"] == "mowing_finished"
 
 
 async def test_restart_does_not_replay(
-    hass: HomeAssistant, fake_api: FakeMowDeck, config_entry: MockConfigEntry
+    hass: HomeAssistant, fake_api: FakeMowDeck, loaded_entry: MockConfigEntry
 ) -> None:
     """Delivered notifications are remembered across a reload."""
-    fake_api.inbox_allowed = True
     events: list[Event] = async_capture_events(hass, EVENT_NOTIFICATION)
-    await setup(hass, config_entry)
-    fake_api.inbox.append(notification())
-    await poll(hass, config_entry)
-    assert len(events) == 1
-    await hass.config_entries.async_reload(config_entry.entry_id)
+    item = notification()
+    await fake_api.push_notification(item)
+    await wait_for(hass, lambda: len(events) == 1)
+    diagnostics = await async_get_config_entry_diagnostics(hass, loaded_entry)
+    assert diagnostics["notifications"] == {"received": 1, "delivered": 1}
+
+    subscriptions = len(fake_api.ws_subscriptions)
+    await hass.config_entries.async_reload(loaded_entry.entry_id)
     await hass.async_block_till_done()
-    await poll(hass, config_entry)
-    assert len(events) == 1
-    diagnostics = await async_get_config_entry_diagnostics(hass, config_entry)
-    assert diagnostics["notifications"] == {"inbox": True, "realtime": False, "delivered": 1}
-    await teardown(hass, config_entry)
+    await wait_for(hass, lambda: len(fake_api.ws_subscriptions) > subscriptions)
+    await fake_api.push_notification(item)
+    await fake_api.push_notification(notification(kind="battery_low", severity="warning"))
+    await wait_for(hass, lambda: len(events) == 2)
+    assert events[1].data["kind"] == "battery_low"
+    diagnostics = await async_get_config_entry_diagnostics(hass, loaded_entry)
+    assert diagnostics["notifications"] == {"received": 1, "delivered": 2}
+
+
+async def test_delivered_ids_are_capped(
+    hass: HomeAssistant, fake_api: FakeMowDeck, loaded_entry: MockConfigEntry
+) -> None:
+    """Only the newest SEEN_LIMIT ids are kept."""
+    hub = loaded_entry.runtime_data.notifications
+    for index in range(SEEN_LIMIT + 3):
+        hub.async_push(notification(id=f"n-{index}"))
+    assert hub.delivered_count == SEEN_LIMIT
 
 
 async def test_persistent_notifications_by_severity(
     hass: HomeAssistant, fake_api: FakeMowDeck, config_entry: MockConfigEntry
 ) -> None:
     """With the option at critical only critical notifications are mirrored."""
-    fake_api.inbox_allowed = True
     config_entry.add_to_hass(hass)
     hass.config_entries.async_update_entry(
         config_entry, options={CONF_PERSISTENT_SEVERITY: "critical"}
     )
-    await setup(hass, config_entry)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    await wait_for(hass, lambda: bool(fake_api.ws_subscriptions))
+    events: list[Event] = async_capture_events(hass, EVENT_NOTIFICATION)
     stuck = notification()
-    fake_api.inbox += [stuck, notification(kind="battery_low", severity="warning")]
-    await poll(hass, config_entry)
+    await fake_api.push_notification(stuck)
+    await fake_api.push_notification(notification(kind="battery_low", severity="warning"))
+    await wait_for(hass, lambda: len(events) == 2)
     shown = persistent_notification._async_get_or_create_notifications(hass)
     assert list(shown) == [f"{DOMAIN}_{stuck['id']}"]
     assert shown[f"{DOMAIN}_{stuck['id']}"]["title"] == "Luba is stuck"
-    await teardown(hass, config_entry)
-
-
-async def test_realtime_notification(
-    hass: HomeAssistant, fake_api: FakeMowDeck, loaded_entry: MockConfigEntry
-) -> None:
-    """A notification message on the socket creates the entity and fires it, once."""
-    events: list[Event] = async_capture_events(hass, EVENT_NOTIFICATION)
-    item = notification(kind="mowing_finished", severity="info")
-    await fake_api.push({"type": "notification", "notification": item})
-    await wait_for(hass, lambda: hass.states.get(NOTIFICATION) is not None)
-    await fake_api.push({"type": "notification", "notification": item})
-    await fake_api.push({"type": "notification", "notification": "garbage"})
-    second = notification(kind="mowing_finished", severity="info")
-    await fake_api.push({"type": "notification", "notification": second})
-    await wait_for(hass, lambda: len(events) == 2)
-    assert state_of(hass, NOTIFICATION).attributes["notification_id"] == second["id"]
+    await hass.config_entries.async_unload(config_entry.entry_id)
+    await hass.async_block_till_done()
 
 
 async def test_command_event(
