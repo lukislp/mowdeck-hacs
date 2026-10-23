@@ -32,7 +32,8 @@
       "mowing_time_today": { "default": "mdi:timer-sand" },
       "distance_today": { "default": "mdi:map-marker-path" },
       "jobs_today": { "default": "mdi:counter" },
-      "online_time_today": { "default": "mdi:access-point" }
+      "online_time_today": { "default": "mdi:access-point" },
+      "ai_recovery": { "default": "mdi:robot-outline" }
     },
     "button": {
       "emergency_stop": { "default": "mdi:alert-octagon" },
@@ -41,7 +42,8 @@
       "firmware_check": { "default": "mdi:cloud-search-outline" },
       "blade_changed": { "default": "mdi:saw-blade" },
       "schedule_run_now": { "default": "mdi:play-circle-outline" },
-      "schedule_skip_next": { "default": "mdi:skip-next-circle-outline" }
+      "schedule_skip_next": { "default": "mdi:skip-next-circle-outline" },
+      "start_ai_analysis": { "default": "mdi:robot-confused-outline" }
     },
     "number": {
       "blade_height": { "default": "mdi:arrow-expand-vertical" },
@@ -68,7 +70,12 @@
     },
     "event": {
       "command": { "default": "mdi:console-line" },
-      "notification": { "default": "mdi:bell-ring-outline" }
+      "notification": { "default": "mdi:bell-ring-outline" },
+      "ai_recovery": { "default": "mdi:robot-outline" }
+    },
+    "image": {
+      "ai_recovery_image": { "default": "mdi:camera-iris" },
+      "ai_recovery_map": { "default": "mdi:map-search-outline" }
     }
   },
   "services": {

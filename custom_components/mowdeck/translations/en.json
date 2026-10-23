@@ -132,6 +132,9 @@
       },
       "schedule_skip_next": {
         "name": "Skip next run of {schedule}"
+      },
+      "start_ai_analysis": {
+        "name": "Start AI analysis"
       }
     },
     "camera": {
@@ -421,6 +424,86 @@
       },
       "online_time_today": {
         "name": "Online time today"
+      },
+      "ai_recovery": {
+        "name": "AI recovery",
+        "state": {
+          "analysing": "Analysing",
+          "proposed": "Proposal waiting for approval",
+          "rejected_by_ai": "No proposal",
+          "failed": "Analysis failed",
+          "rejected": "Rejected",
+          "expired": "Expired",
+          "executing": "Executing",
+          "verifying": "Verifying",
+          "recovered": "Recovered",
+          "not_recovered": "Not recovered",
+          "aborted": "Aborted"
+        },
+        "state_attributes": {
+          "proposal_id": {
+            "name": "Proposal ID"
+          },
+          "task": {
+            "name": "Task",
+            "state": {
+              "recover": "Free the mower",
+              "find_dock": "Find the dock"
+            }
+          },
+          "trigger": {
+            "name": "Trigger",
+            "state": {
+              "manual": "Manual",
+              "error": "Automatic (error)"
+            }
+          },
+          "round": {
+            "name": "Round"
+          },
+          "action": {
+            "name": "Action",
+            "state": {
+              "drive": "Drive",
+              "return_to_dock": "Return to dock",
+              "resume": "Resume the job",
+              "none": "None"
+            }
+          },
+          "fallback": {
+            "name": "Rule-based fallback"
+          },
+          "step_count": {
+            "name": "Drive steps"
+          },
+          "drive_seconds": {
+            "name": "Driving time"
+          },
+          "steps": {
+            "name": "Steps"
+          },
+          "confidence": {
+            "name": "Confidence"
+          },
+          "situation": {
+            "name": "Situation"
+          },
+          "rationale": {
+            "name": "Rationale"
+          },
+          "detail": {
+            "name": "Detail"
+          },
+          "final": {
+            "name": "Final"
+          },
+          "expires_at": {
+            "name": "Approval possible until"
+          },
+          "link": {
+            "name": "Open in MowDeck"
+          }
+        }
       }
     },
     "switch": {
@@ -479,6 +562,59 @@
             }
           }
         }
+      },
+      "ai_recovery": {
+        "name": "AI recovery",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "created": "Created",
+              "updated": "Updated"
+            }
+          },
+          "proposal_id": {
+            "name": "Proposal ID"
+          },
+          "state": {
+            "name": "State",
+            "state": {
+              "analysing": "Analysing",
+              "proposed": "Proposal waiting for approval",
+              "rejected_by_ai": "No proposal",
+              "failed": "Analysis failed",
+              "rejected": "Rejected",
+              "expired": "Expired",
+              "executing": "Executing",
+              "verifying": "Verifying",
+              "recovered": "Recovered",
+              "not_recovered": "Not recovered",
+              "aborted": "Aborted"
+            }
+          },
+          "action": {
+            "name": "Action",
+            "state": {
+              "drive": "Drive",
+              "return_to_dock": "Return to dock",
+              "resume": "Resume the job",
+              "none": "None"
+            }
+          },
+          "final": {
+            "name": "Final"
+          },
+          "link": {
+            "name": "Open in MowDeck"
+          }
+        }
+      }
+    },
+    "image": {
+      "ai_recovery_image": {
+        "name": "AI recovery image"
+      },
+      "ai_recovery_map": {
+        "name": "AI recovery map"
       }
     }
   },

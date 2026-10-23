@@ -25,6 +25,7 @@ from .notifications import storage_key as notifications_storage_key
 from .realtime import RealtimeClient
 from .scheduler import SchedulerCoordinator
 from .services import async_setup_services
+from .vision import VisionCoordinator
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -32,6 +33,7 @@ PLATFORMS: list[Platform] = [
     Platform.CAMERA,
     Platform.DEVICE_TRACKER,
     Platform.EVENT,
+    Platform.IMAGE,
     Platform.LAWN_MOWER,
     Platform.NUMBER,
     Platform.SELECT,
@@ -53,6 +55,7 @@ class MowDeckRuntimeData:
     health: HealthCoordinator
     scheduler: SchedulerCoordinator
     notifications: NotificationHub
+    vision: VisionCoordinator
 
 
 type MowDeckConfigEntry = ConfigEntry[MowDeckRuntimeData]
@@ -81,6 +84,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> b
     scheduler = SchedulerCoordinator(hass, entry, coordinator)
     notifications = NotificationHub(hass, entry, coordinator)
     await notifications.async_load()
+    vision = VisionCoordinator(hass, entry, coordinator)
     realtime = RealtimeClient(
         hass,
         client,
@@ -88,12 +92,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> b
         entry_id=entry.entry_id,
         on_auth_failed=_auth_failed,
         on_notification=notifications.async_push,
+        on_vision_proposal=vision.async_push,
     )
     # The further services never block the setup; their entities wait for them.
     await health.async_refresh()
     await scheduler.async_refresh()
+    await vision.async_refresh()
     entry.runtime_data = MowDeckRuntimeData(
-        client, coordinator, realtime, health, scheduler, notifications
+        client, coordinator, realtime, health, scheduler, notifications, vision
     )
     entry.async_on_unload(
         coordinator.async_add_listener(_device_updater(hass, entry.entry_id, coordinator))

@@ -146,6 +146,83 @@ def notification(**overrides: Any) -> dict[str, Any]:
 
 
 SCHEDULE_ID = "5e1d7c3a-2b4f-4e8a-9d6c-7f0a1b2c3d4e"
+PROPOSAL_ID = "7c1e2d3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f"
+# The smallest valid JPEG and PNG headers are enough for Home Assistant's image entity.
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 16 + b"\xff\xd9"
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+
+
+def proposal(**overrides: Any) -> dict[str, Any]:
+    """A full ProposalOut of the test mower: proposed, drive two steps, with a camera frame
+    and the map rendering."""
+    item: dict[str, Any] = {
+        "id": PROPOSAL_ID,
+        "mower_id": MOWER_ID,
+        "chain_id": str(uuid.uuid4()),
+        "task": "recover",
+        "round": 1,
+        "rounds_left": 2,
+        "can_retry": False,
+        "state": "proposed",
+        "final": False,
+        "action": "drive",
+        "fallback": False,
+        "trigger": "manual",
+        "trigger_error_code": None,
+        "assessment": {
+            "action": "drive",
+            "confidence": 0.8,
+            "situation": "stuck_on_obstacle",
+            "rationale": "A root blocks the left wheel; reverse, then turn right.",
+            "risk": [],
+            "abort_reasons": [],
+        },
+        "steps": [
+            {"index": 0, "linear": -0.5, "angular": 0.0, "seconds": 1.5, "outcome": "pending"},
+            {"index": 1, "linear": 0.0, "angular": -0.6, "seconds": 0.75, "outcome": "pending"},
+        ],
+        "frames": [
+            {"index": 0, "source": "mower", "camera": "0", "side": "left", "captured_at": None},
+            {"index": 1, "source": "map", "camera": None, "side": None, "captured_at": None},
+        ],
+        "image_count": 2,
+        "stereo": False,
+        "light_used": False,
+        "hosted": True,
+        "provider_family": "custom",
+        "provider_model": "model",
+        "job": None,
+        "detail": None,
+        "requested_by": {"kind": "api_token", "subject": str(uuid.uuid4()), "display_name": "HA"},
+        "approved_by": None,
+        "approved_at": None,
+        "decided_by": None,
+        "decided_at": None,
+        "drive_session_id": None,
+        "return_command_id": None,
+        "created_at": now_iso(),
+        "analysed_at": now_iso(),
+        "started_at": None,
+        "finished_at": None,
+        "expires_at": in_hours(0.1),
+        "updated_at": now_iso(),
+        "link": f"/mowers/{MOWER_ID}?assist={PROPOSAL_ID}",
+    }
+    item.update(overrides)
+    return item
+
+
+def proposal_summary(full: dict[str, Any]) -> dict[str, Any]:
+    """The proposal of a Realtime ``vision_proposal`` message (no frames, steps counted)."""
+    keys: tuple[str, ...] = ("id", "mower_id", "task", "round", "state", "final", "action")
+    keys += ("fallback", "trigger", "expires_at", "link", "updated_at")
+    summary = {k: full.get(k) for k in keys}
+    assessment = full.get("assessment") or {}
+    summary["steps"] = len(full.get("steps") or [])
+    summary["confidence"] = assessment.get("confidence")
+    summary["situation"] = assessment.get("situation")
+    summary["error_code"] = full.get("trigger_error_code")
+    return summary
 
 
 def in_hours(hours: float) -> str:
@@ -283,6 +360,12 @@ class FakeMowDeck:
     weather_queries: list[dict[str, str]] = field(default_factory=list)
     daily: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     heatmap_queries: list[dict[str, str]] = field(default_factory=list)
+    # Vision (False: this MowDeck runs no Vision service, every path answers a plain 404).
+    vision_enabled: bool = True
+    proposals: dict[str, dict[str, Any]] = field(default_factory=dict)
+    proposal_images: dict[tuple[str, int], tuple[bytes, str]] = field(default_factory=dict)
+    vision_starts: list[dict[str, Any]] = field(default_factory=list)
+    vision_start_problem: tuple[int, str] | None = None
     firmware_check_status: int | None = None
     blade_resets: list[dict[str, Any]] = field(default_factory=list)
     fail_requests: int = 0
@@ -428,6 +511,11 @@ class FakeMowDeck:
         app.router.add_put("/api/v1/fleet/mowers/{mower_id}/mow-defaults", self._mow_defaults)
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/health/daily", self._daily)
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/heatmap", self._heatmap)
+        vision = "/api/v1/vision"
+        app.router.add_post(vision + "/mowers/{mower_id}/recover", self._vision_recover)
+        app.router.add_get(vision + "/mowers/{mower_id}/proposals", self._vision_list)
+        app.router.add_get(vision + "/proposals/{proposal_id}", self._vision_get)
+        app.router.add_get(vision + "/proposals/{proposal_id}/images/{index}", self._vision_image)
         camera = "/api/v1/fleet/mowers/{mower_id}/camera/session"
         app.router.add_post(camera, self._camera_open)
         app.router.add_post(camera + "/{lease_id}/renew", self._camera_renew)
@@ -686,6 +774,57 @@ class FakeMowDeck:
                 "to": now_iso(),
             }
         )
+
+    # Vision
+
+    async def _vision_recover(self, request: web.Request) -> web.Response:
+        if not self.vision_enabled:
+            return web.Response(status=404, text="404 page not found")
+        mower_id = request.match_info["mower_id"]
+        if mower_id not in {m["id"] for m in self._visible(request)}:
+            return problem(404, "Not found", "mower not found")
+        if self.relations is not None and "can_drive" not in self.relations:
+            return problem(403, "Forbidden", "missing can_drive on the mower")
+        if self.vision_start_problem is not None:
+            status, slug = self.vision_start_problem
+            return problem(status, "Problem", slug)
+        self.vision_starts.append({"mower_id": mower_id, **await request.json()})
+        started = proposal(
+            id=str(uuid.uuid4()),
+            state="analysing",
+            action=None,
+            assessment=None,
+            steps=[],
+            frames=[],
+            analysed_at=None,
+            expires_at=None,
+        )
+        self.proposals[started["id"]] = started
+        return web.json_response(started, status=202)
+
+    async def _vision_list(self, request: web.Request) -> web.Response:
+        if not self.vision_enabled:
+            return web.Response(status=404, text="404 page not found")
+        mower_id = request.match_info["mower_id"]
+        if mower_id not in {m["id"] for m in self._visible(request)}:
+            return problem(404, "Not found", "mower not found")
+        items = [p for p in self.proposals.values() if p["mower_id"] == mower_id]
+        items.sort(key=lambda p: p["created_at"], reverse=True)
+        limit = int(request.query.get("limit", "20"))
+        return web.json_response({"items": items[:limit], "next_before": None})
+
+    async def _vision_get(self, request: web.Request) -> web.Response:
+        found = self.proposals.get(request.match_info["proposal_id"])
+        if not self.vision_enabled or found is None:
+            return problem(404, "Not found", "proposal not found")
+        return web.json_response(found)
+
+    async def _vision_image(self, request: web.Request) -> web.Response:
+        key = (request.match_info["proposal_id"], int(request.match_info["index"]))
+        if key not in self.proposal_images:
+            return problem(404, "Not found", "image purged")
+        content, content_type = self.proposal_images[key]
+        return web.Response(body=content, content_type=content_type)
 
     def _visible(self, request: web.Request) -> list[dict[str, Any]]:
         return self.mowers if self._account(request) == ACCOUNT_ID else []

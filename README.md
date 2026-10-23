@@ -27,7 +27,7 @@ In the MowDeck web app: **Settings, API tokens, New token**. Give it a name ("Ho
 | --- | --- |
 | `mower.view` | required: mowers, states, map, live updates, the cameras, the health totals, **Check firmware now**. **Grant it on the whole account** to receive MowDeck notifications: only an account-wide `mower.view` implies `notifications.view`, which MowDeck needs to push the account's notifications to a token |
 | `mower.control` | start, pause, dock, end job, blade height, mowing speed, light (without it Home Assistant is read only; the emergency stop works for viewers too) |
-| `mower.drive` | optional: the manual drive speed setting (the number is disabled by default); also needed on a mower for its Vision notifications (`vision_proposal`, `vision_auto_proposal`) |
+| `mower.drive` | optional: the manual drive speed setting (the number is disabled by default) and **Start AI analysis** (Vision); also needed on a mower for its Vision notifications (`vision_proposal`, `vision_auto_proposal`) |
 | `fleet.manage` | optional: installing a firmware update from the update entity, **Blade changed** |
 | `schedule.edit` | optional: the schedule switches and **Skip next run** buttons (together with `mower.control`, which **Run now** needs alone). Seeing schedules, the next mowing, the last run and the rain decision only needs `mower.view` (`scheduler.view` follows it) |
 
@@ -63,6 +63,7 @@ The flow exchanges the token, reads `/api/v1/identity/me` and lists the mowers; 
 | Schedules, their runs, the rain decision | polled, own coordinator | every 5 minutes and right after a schedule action |
 | Notifications | pushed over the WebSocket (`notification` messages) | live; nothing is polled (see [Notifications](#notifications)) |
 | Command results | pushed over the WebSocket | live |
+| Vision proposals | the newest per mower, polled, own coordinator; changes pushed over the WebSocket (`vision_proposal`) | every 10 minutes; live while the socket is up |
 
 Each MowDeck service has its own coordinator: when one fails, only its entities turn unavailable. When one answers "forbidden" (403), a Repairs issue names the permission the token lacks and links to MowDeck's API token page (`/settings/api-tokens`); it disappears with the next successful update.
 
@@ -119,6 +120,10 @@ Per mower one device (manufacturer Mammotion, model from the capabilities, firmw
 | Position | `device_tracker.luba_position` | GPS (`position` of the state), attributes `heading` (degrees, one decimal) and `position_source` (`rtk`, `gnss` or `dock`) |
 | Camera | `camera.luba_camera` | the live camera over MowDeck's camera relay as WebRTC (see [Cameras](#cameras)); only for mowers whose capabilities name a camera (`camera` `cloud` or `local`) |
 | Further cameras | `camera.luba_front_right_camera`, ... | one per further camera that delivers video, added after the first stream (see [Cameras](#cameras)) |
+| Start AI analysis | `button.luba_start_ai_analysis` | starts a Vision analysis (see [Vision](#vision-ai-assist)); needs `mower.drive` |
+| AI recovery | `sensor.luba_ai_recovery` | state of the mower's newest Vision proposal and what it proposes (see [Vision](#vision-ai-assist)) |
+| AI recovery image, AI recovery map | `image.luba_ai_recovery_image`, `image.luba_ai_recovery_map` | the camera frame the model saw and Vision's top-down map rendering (the map disabled by default) |
+| AI recovery (event) | `event.luba_ai_recovery` | fires `created` and `updated` for every proposal change |
 | Camera light | `switch.luba_camera_light` | the camera's headlamp: `light_on` of the state (unknown while not reported), `set_light`; only for mowers whose capabilities have `light` |
 
 **Start mowing** resumes a paused job; otherwise it starts the selected areas (area switches / Area select) in map order, with the mower's mowing defaults as pattern once they are saved in MowDeck (until then the mower's own defaults). With every area switch off, starting is refused.
@@ -143,6 +148,36 @@ Both events have logbook entries.
 - MowDeck replays nothing after a reconnect: a notification raised while Home Assistant was offline or the socket was down is not delivered later.
 - Every notification fires once: Home Assistant remembers the delivered ids, also across restarts.
 
+
+## Vision (AI assist)
+
+MowDeck's Vision service looks at a photo of a stuck mower and proposes how to free it: a few short drive steps with the blades off, returning to the dock, or resuming the paused job. Home Assistant can **start** an analysis and **show** the proposal; approving or rejecting it stays in MowDeck, where a person sees the picture and the steps before the mower moves (the `link` attribute opens the proposal there).
+
+| Entity | What it does |
+| --- | --- |
+| `button.luba_start_ai_analysis` | `POST /api/v1/vision/mowers/{id}/recover` with task `recover` and no images: the mower's gateway takes the photo. Only offered when the token holds `mower.drive` on the mower. MowDeck refuses while a proposal of the mower is still open (409), without a usable AI provider (409 `vision-provider-missing`: an API token has no provider of its own, so the installation's hosted default must be enabled and the plan must include `ai_recover_hosted`), beyond the daily cap (429) and without the plan feature (403 `feature-not-in-plan`); the error names MowDeck's reason |
+| `sensor.luba_ai_recovery` | the state of the newest proposal: `analysing`, `proposed` (waiting for approval in MowDeck), `rejected_by_ai` (the model proposes nothing), `failed`, `rejected`, `expired`, `executing`, `verifying`, `recovered`, `not_recovered`, `aborted`. Attributes: `proposal_id`, `task`, `trigger` (`manual` or `error`), `round`, `action` (`drive`, `return_to_dock`, `resume`), `fallback`, `step_count`, `drive_seconds`, `steps` (each with `linear`, `angular`, `seconds`, `outcome`), `confidence`, `situation`, `rationale`, `detail`, `final`, `expires_at` (approval is refused after it), `link` |
+| `image.luba_ai_recovery_image` | the camera frame the model saw (the left camera of a stereo pair); fetched once per proposal from `GET /vision/proposals/{id}/images/{index}`. MowDeck purges the images after the proposal's TTL; then the image is empty |
+| `image.luba_ai_recovery_map` | the top-down map rendering around the mower that Vision adds to the photo (disabled by default) |
+| `event.luba_ai_recovery` | event types `created` and `updated`, attributes `proposal_id`, `state`, `action`, `final`, `link`; also the bus event `mowdeck_vision_proposal` (with `mower_id` and `config_entry_id`, logbook entry) |
+
+The entities exist only when MowDeck runs the Vision service. The newest proposal is read at startup and every 10 minutes; every change arrives at once over the Realtime WebSocket (`vision_proposal`), after which the full proposal (frames, assessment, steps) is read. A MowDeck notification of kind `vision_proposal` or `vision_auto_proposal` also arrives when the token holds `mower.drive` (see [Notifications](#notifications)).
+
+```yaml
+# Show the proposal on the phone, with a button to approve it in MowDeck.
+triggers:
+  - trigger: state
+    entity_id: sensor.luba_ai_recovery
+    to: proposed
+actions:
+  - action: notify.mobile_app_phone
+    data:
+      title: "Luba: proposal waiting"
+      message: "{{ state_attr('sensor.luba_ai_recovery', 'situation') }}"
+      data:
+        image: /api/image_proxy/image.luba_ai_recovery_image
+        url: "{{ state_attr('sensor.luba_ai_recovery', 'link') }}"
+```
 
 ## Cameras
 

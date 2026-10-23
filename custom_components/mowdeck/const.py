@@ -30,6 +30,8 @@ STATIC_REFRESH: Final = timedelta(minutes=10)
 HEALTH_REFRESH: Final = timedelta(minutes=15)
 # Schedules, their runs and the rain decision; also refreshed right after schedule actions.
 SCHEDULER_REFRESH: Final = timedelta(minutes=5)
+# The newest Vision proposal per mower; changes arrive live over the WebSocket.
+VISION_REFRESH: Final = timedelta(minutes=10)
 # A state older than this counts as offline (Telemetry's own stale flag also counts).
 STALE_AFTER: Final = timedelta(minutes=5)
 
@@ -61,6 +63,7 @@ AREA_FALLBACK: Final = {"en": "Area {n}", "de": "Bereich {n}"}
 
 EVENT_COMMAND_RESULT: Final = "mowdeck_command_result"
 EVENT_NOTIFICATION: Final = "mowdeck_notification"
+EVENT_VISION_PROPOSAL: Final = "mowdeck_vision_proposal"
 
 # NotificationSeverity (apps/web/openapi/notifications.json), lowest first.
 SEVERITIES: Final = ["info", "warning", "critical"]
