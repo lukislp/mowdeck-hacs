@@ -51,6 +51,7 @@ def mower_state(**overrides: Any) -> dict[str, Any]:
         "observed_at": now_iso(),
         "heartbeat_at": now_iso(),
         "connected": True,
+        "base_station": None,
         "activity": "docked",
         "battery_percent": 87,
         "charging": True,
@@ -88,6 +89,7 @@ MOWER_STATE_FIELDS = frozenset(
     {
         "account_id",
         "activity",
+        "base_station",
         "battery_percent",
         "blade_height_mm",
         "charging",
@@ -120,6 +122,47 @@ MOWER_STATE_FIELDS = frozenset(
         "turn_style",
     }
 )
+
+
+BASE_STATION_ID = "3b7e9d1c-5a2f-4c8e-b6d0-9e1f2a3b4c5d"
+
+
+def base_station(**overrides: Any) -> dict[str, Any]:
+    """A BaseStationOut of the test account, linked to the test mower."""
+    item: dict[str, Any] = {
+        "id": BASE_STATION_ID,
+        "name": "Garden base",
+        "source": "cloud",
+        "linked_account_id": str(uuid.uuid4()),
+        "device_name": "RBS03A0ABCDEF",
+        "iot_id": "iot-base-1",
+        "model": "RTK base station",
+        "mower_ids": [MOWER_ID],
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    item.update(overrides)
+    return item
+
+
+def base_station_state(**overrides: Any) -> dict[str, Any]:
+    """MowerState.base_station: corrections over LoRa, link up, a fixed base."""
+    state: dict[str, Any] = {
+        "base_station_id": BASE_STATION_ID,
+        "correction_link": "lora",
+        "link_up": True,
+        "lora_channel": 17,
+        "satellites": 31,
+        "rtk_status": "fixed",
+        "wifi_dbm": -61,
+        "details_at": now_iso(),
+        "position": {"lat": 48.1371, "lon": 11.5751},
+        "moved": False,
+        "firmware": "1.2.0",
+        "firmware_info": None,
+    }
+    state.update(overrides)
+    return state
 
 
 def notification(**overrides: Any) -> dict[str, Any]:
@@ -373,6 +416,11 @@ class FakeMowDeck:
     plan_requests: list[dict[str, Any]] = field(default_factory=list)
     plan_route_found: bool = True
     firmware_check_status: int | None = None
+    # RTK base stations (BaseStationOut by id; None: a MowDeck before 0.11, the routes answer a
+    # plain 404), the bodies of firmware updates and the answer status of firmware checks.
+    base_stations: dict[str, dict[str, Any]] | None = None
+    base_station_updates: list[dict[str, Any]] = field(default_factory=list)
+    base_station_check_status: int | None = None
     blade_resets: list[dict[str, Any]] = field(default_factory=list)
     # MowDeck 0.8: the per-mower blade threshold and the camera still image (None: a MowDeck
     # before 0.8, the routes answer a plain 404).
@@ -534,6 +582,10 @@ class FakeMowDeck:
         app.router.add_get(vision + "/proposals/{proposal_id}", self._vision_get)
         app.router.add_get(vision + "/proposals/{proposal_id}/images/{index}", self._vision_image)
         app.router.add_post("/api/v1/planner/plans", self._plan)
+        stations = "/api/v1/fleet/base-stations"
+        app.router.add_get(stations, self._base_stations)
+        app.router.add_post(stations + "/{station_id}/firmware/check", self._base_station_check)
+        app.router.add_post(stations + "/{station_id}/firmware/update", self._base_station_update)
         camera = "/api/v1/fleet/mowers/{mower_id}/camera/session"
         app.router.add_post(camera, self._camera_open)
         app.router.add_post(camera + "/{lease_id}/renew", self._camera_renew)
@@ -922,6 +974,64 @@ class FakeMowDeck:
                 "observed_at": now_iso(),
                 "received_at": now_iso(),
             }
+        )
+
+    # RTK base stations
+
+    def _base_station(self, request: web.Request) -> dict[str, Any] | web.Response:
+        if self.base_stations is None:
+            return web.Response(status=404, text="404: Not Found")
+        station = self.base_stations.get(request.match_info["station_id"])
+        if station is None or self._account(request) != ACCOUNT_ID:
+            return problem(404, "Not found", "base station not found")
+        return station
+
+    async def _base_stations(self, request: web.Request) -> web.Response:
+        if self.base_stations is None:
+            return web.Response(status=404, text="404: Not Found")
+        items = list(self.base_stations.values()) if self._account(request) == ACCOUNT_ID else []
+        return web.json_response({"items": items})
+
+    async def _base_station_check(self, request: web.Request) -> web.Response:
+        station = self._base_station(request)
+        if isinstance(station, web.Response):
+            return station
+        if self.base_station_check_status is not None:
+            return problem(self.base_station_check_status, "Problem", "base-station-not-linked")
+        return web.json_response(
+            {
+                "installed": "1.2.0",
+                "available": "1.3.0",
+                "update_state": "available",
+                "progress": None,
+                "release_notes": "Better LoRa range.",
+                "checked_at": now_iso(),
+                "failure_reason": None,
+            }
+        )
+
+    async def _base_station_update(self, request: web.Request) -> web.Response:
+        station = self._base_station(request)
+        if isinstance(station, web.Response):
+            return station
+        if self.relations is not None and "can_manage_mowers" not in self.relations:
+            return problem(403, "Forbidden", "missing can_manage_mowers on the account")
+        body = await request.json()
+        self.base_station_updates.append({"station_id": station["id"], **body})
+        command_id = str(uuid.uuid4())
+        return web.json_response(
+            {
+                "command_id": command_id,
+                "mower_id": body.get("mower_id") or station["mower_ids"][0],
+                "kind": "base_station_firmware_update",
+                "priority": "normal",
+                "issued_at": now_iso(),
+                "expires_at": now_iso(),
+                "correlation_id": "test",
+                "status": "accepted",
+                "status_url": f"/api/v1/fleet/commands/{command_id}",
+            },
+            status=202,
         )
 
     def _visible(self, request: web.Request) -> list[dict[str, Any]]:

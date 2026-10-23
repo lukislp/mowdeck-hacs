@@ -1,9 +1,16 @@
-"""Firmware of a MowDeck mower as an update entity (``MowerState.firmware_info``).
+"""Firmware of a MowDeck mower (``MowerState.firmware_info``) and of each RTK base station
+(``MowerState.base_station.firmware_info``) as update entities.
 
 Only for mowers whose capabilities have ``firmware_update``. Installing sends
 ``firmware_update`` with the offered version; MowDeck refuses it unless the mower is docked
 with enough battery and idle, and the command needs the token permission ``fleet.manage``.
 The vendor is asked for new versions by MowDeck, not by Home Assistant.
+
+A base station's update is installed through a linked mower whose connection can relay it
+(``base_station_firmware_update``): ``POST /fleet/base-stations/{id}/firmware/update``,
+``can_manage_mowers`` on the account (``fleet.manage``); the relaying mower must not mow,
+return, update or drive. ``homeassistant.update_entity`` on it asks the vendor now
+(``POST .../firmware/check``).
 """
 
 from __future__ import annotations
@@ -19,6 +26,11 @@ from homeassistant.components.update import (
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
+from .base_station import (
+    BaseStationCoordinator,
+    BaseStationEntity,
+    async_add_base_station_entities,
+)
 from .entity import MowDeckEntity, async_add_mower_entities
 
 if TYPE_CHECKING:
@@ -48,6 +60,11 @@ async def async_setup_entry(
             else []
         ),
         domain=Platform.UPDATE,
+    )
+    async_add_base_station_entities(
+        entry,
+        async_add_entities,
+        lambda base_stations, station_id: [BaseStationFirmware(base_stations, station_id)],
     )
 
 
@@ -121,3 +138,87 @@ class FirmwareUpdate(MowDeckEntity, UpdateEntity):
         await self.async_send_command(
             {"kind": "firmware_update", "version": version or self.latest_version}
         )
+
+
+class BaseStationFirmware(BaseStationEntity, UpdateEntity):
+    """Installed and offered firmware of a base station, installed through a linked mower."""
+
+    _attr_device_class = UpdateDeviceClass.FIRMWARE
+
+    def __init__(self, base_stations: BaseStationCoordinator, station_id: str) -> None:
+        """Create the update entity."""
+        super().__init__(base_stations, station_id, "firmware")
+
+    @property
+    def _info(self) -> dict[str, Any]:
+        return self.coordinator.firmware_info(self.station_id)
+
+    @property
+    def supported_features(self) -> UpdateEntityFeature:
+        """Install only through a linked mower that can relay it."""
+        features = UpdateEntityFeature.PROGRESS | UpdateEntityFeature.RELEASE_NOTES
+        if self.coordinator.update_relay(self.station_id) is not None:
+            features |= UpdateEntityFeature.INSTALL
+        return features
+
+    @property
+    def installed_version(self) -> str | None:
+        """The version running on the base station."""
+        installed = self._info.get("installed") or self.base_state.get("firmware")
+        return str(installed) if installed else None
+
+    @property
+    def latest_version(self) -> str | None:
+        """The offered version while one is available, else the installed one."""
+        available = self._info.get("available")
+        if available and self._info.get("update_state") in ("available", "installing", "failed"):
+            return str(available)
+        return self.installed_version
+
+    @property
+    def in_progress(self) -> bool:
+        """An update of the base station is installing."""
+        return self._info.get("update_state") == "installing"
+
+    @property
+    def update_percentage(self) -> int | None:
+        """Percent done while installing, if reported."""
+        progress = self._info.get("progress")
+        if not self.in_progress or isinstance(progress, bool):
+            return None
+        return int(progress) if isinstance(progress, int | float) else None
+
+    @property
+    def release_summary(self) -> str | None:
+        """The start of the release notes."""
+        notes = self._info.get("release_notes")
+        if not notes:
+            return None
+        text = str(notes).strip()
+        return text if len(text) <= SUMMARY_MAX else text[: SUMMARY_MAX - 1].rstrip() + "…"
+
+    async def async_release_notes(self) -> str | None:
+        """The full release notes of the offered version."""
+        notes = self._info.get("release_notes")
+        return str(notes) if notes else None
+
+    async def async_install(self, version: str | None, backup: bool, **kwargs: Any) -> None:
+        """Install the offered version through the relaying mower (MowDeck checks the rest)."""
+        await self.async_call_api(
+            self.coordinator.client.update_base_station_firmware(
+                self.station_id,
+                version or self.latest_version or "",
+                self.coordinator.update_relay(self.station_id),
+            ),
+            "base_station_firmware_update",
+            "fleet.manage",
+        )
+
+    async def async_update(self) -> None:
+        """``homeassistant.update_entity``: ask the vendor for the base station's firmware now."""
+        info = await self.async_call_api(
+            self.coordinator.client.check_base_station_firmware(self.station_id),
+            "base_station_firmware_check",
+            "mower.view",
+        )
+        self.coordinator.async_set_checked(self.station_id, info)

@@ -15,6 +15,11 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
 from .api import MowDeckClient
+from .base_station import (
+    BASE_STATION_PREFIX,
+    BaseStationCoordinator,
+    async_update_base_station_devices,
+)
 from .camera import storage_key as camera_storage_key
 from .const import CONF_API_TOKEN, DOMAIN
 from .coordinator import MowDeckCoordinator
@@ -59,6 +64,7 @@ class MowDeckRuntimeData:
     notifications: NotificationHub
     vision: VisionCoordinator
     heatmap: HeatmapCoordinator
+    base_stations: BaseStationCoordinator
 
 
 type MowDeckConfigEntry = ConfigEntry[MowDeckRuntimeData]
@@ -101,16 +107,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> b
     await health.async_refresh()
     await scheduler.async_refresh()
     await vision.async_refresh()
+    base_stations = BaseStationCoordinator(hass, entry, coordinator)
+    await base_stations.async_refresh()
     # Heatmaps are slow queries: read in the background, their entities wait for them.
     heatmap = HeatmapCoordinator(hass, entry, coordinator)
     entry.runtime_data = MowDeckRuntimeData(
-        client, coordinator, realtime, health, scheduler, notifications, vision, heatmap
+        client,
+        coordinator,
+        realtime,
+        health,
+        scheduler,
+        notifications,
+        vision,
+        heatmap,
+        base_stations,
     )
     entry.async_on_unload(
         coordinator.async_add_listener(_device_updater(hass, entry.entry_id, coordinator))
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    base_station_devices = async_update_base_station_devices(hass, entry.entry_id, base_stations)
+    entry.async_on_unload(base_stations.async_add_listener(base_station_devices))
+    entry.async_on_unload(coordinator.async_add_listener(base_station_devices))
     entry.async_on_unload(await IssueMonitor(hass, entry, coordinator).async_start())
 
     # Background tasks of an entry are cancelled when it unloads; stop() closes the socket.
@@ -164,9 +183,17 @@ def _device_updater(
 async def async_remove_config_entry_device(
     hass: HomeAssistant, entry: MowDeckConfigEntry, device: dr.DeviceEntry
 ) -> bool:
-    """A mower's device can be deleted once the API token no longer sees the mower."""
+    """A mower's device can be deleted once the API token no longer sees the mower, a base
+    station's once MowDeck no longer lists it."""
     mowers = entry.runtime_data.coordinator.data.mowers
-    return not any(domain == DOMAIN and ident in mowers for domain, ident in device.identifiers)
+    stations = {
+        f"{BASE_STATION_PREFIX}{station_id}"
+        for station_id in entry.runtime_data.base_stations.data.stations
+    }
+    return not any(
+        domain == DOMAIN and (ident in mowers or ident in stations)
+        for domain, ident in device.identifiers
+    )
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: MowDeckConfigEntry) -> None:
