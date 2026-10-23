@@ -9,6 +9,10 @@ license = { text = "AGPL-3.0-only" }
 
 [tool.uv]
 package = false
+# homeassistant 2026.10.x pins Pillow==12.3.0 and uv==0.12.23 exactly; both have published
+# security advisories fixed in Pillow 13.0.0 and uv 0.13.4. Dev/test environment only (HACS
+# ships just custom_components/mowdeck). Drop once Home Assistant bumps its pins.
+override-dependencies = ["pillow>=13.0.0", "uv>=0.13.4"]
 
 [dependency-groups]
 dev = [
