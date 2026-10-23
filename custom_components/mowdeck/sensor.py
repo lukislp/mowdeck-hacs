@@ -38,6 +38,7 @@ from .const import (
 )
 from .entity import MowDeckEntity, async_add_mower_entities
 from .scheduler import parse_time
+from .spot import RUN_STATES
 from .vision import PROPOSAL_STATES
 
 if TYPE_CHECKING:
@@ -511,6 +512,16 @@ async def async_setup_entry(
         fingerprint=lambda m: vision.data.available,
         listen=[vision],
     )
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, m: (
+            [SpotRunSensor(coordinator, m)]
+            if (coordinator.data.capabilities.get(m) or {}).get("manual_drive")
+            else []
+        ),
+        domain=Platform.SENSOR,
+    )
     scheduler = entry.runtime_data.scheduler
     async_add_mower_entities(
         entry,
@@ -749,3 +760,37 @@ class VisionSensor(MowDeckEntity, SensorEntity):
         """What the newest proposal says (nothing without one)."""
         proposal = self._vision.proposal(self.mower_id)
         return proposal_attributes(self._vision, proposal) if proposal else None
+
+
+class SpotRunSensor(MowDeckEntity, SensorEntity):
+    """The spot run MowDeck drives on the mower (``MowerState.spot_run``): its state, kept
+    after the end until the next run, with the progress as attributes. Only for mowers that
+    can be driven (``manual_drive``)."""
+
+    entity_description = SensorEntityDescription(
+        key="spot_run", device_class=SensorDeviceClass.ENUM, options=RUN_STATES
+    )
+
+    def __init__(self, coordinator: MowDeckCoordinator, mower_id: str) -> None:
+        """Create the sensor."""
+        super().__init__(coordinator, mower_id, "spot_run")
+
+    def _run(self) -> dict[str, Any]:
+        run = self.mower_state.get("spot_run")
+        return run if isinstance(run, dict) else {}
+
+    @property
+    def native_value(self) -> str | None:
+        """The run's state; unknown before the first run."""
+        state = self._run().get("state")
+        return state if state in RUN_STATES else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Progress of the run: percent, points and segments, dry run, why it ended early."""
+        run = self._run()
+        if not run:
+            return None
+        keys: tuple[str, ...] = ("run_id", "progress_percent", "driven_points")
+        keys += ("planned_points", "segment_index", "segments_total", "dry_run", "reason")
+        return {key: run.get(key) for key in keys}
