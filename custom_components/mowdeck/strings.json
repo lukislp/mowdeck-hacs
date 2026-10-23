@@ -137,6 +137,11 @@
         "name": "Start AI analysis"
       }
     },
+    "calendar": {
+      "mowing_schedule": {
+        "name": "Mowing schedule"
+      }
+    },
     "camera": {
       "camera": {
         "name": "Camera"

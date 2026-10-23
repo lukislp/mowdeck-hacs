@@ -1,8 +1,9 @@
 """Schedules and the rain decision of MowDeck's Scheduler in their own coordinator.
 
 Polled every ``SCHEDULER_REFRESH`` and right after every schedule action: the schedules the
-token sees, their newest runs, the next firing that is not skipped, the rain decision per
-mower and whether the token may change or start each schedule. A MowDeck without the
+token sees, their newest runs, the next firings of the enabled ones (the mowing calendar, and
+the next firing that is not skipped), the rain decision per mower and whether the token may
+change or start each schedule. A MowDeck without the
 Scheduler (404) simply has no schedule entities.
 """
 
@@ -27,8 +28,8 @@ _LOGGER = logging.getLogger(__name__)
 
 # Run records read per schedule (a group schedule has one per mower and firing).
 RUNS_PER_SCHEDULE = 10
-# Firings previewed when the next one is skipped.
-PREVIEW_COUNT = 3
+# Firings previewed per enabled schedule (the mowing calendar; MowDeck allows up to 20).
+PREVIEW_COUNT = 10
 
 
 def parse_time(value: Any) -> datetime | None:
@@ -51,6 +52,8 @@ class SchedulerData:
     runs: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     # The next firing that is not skipped, for schedules whose next one is skipped.
     next_unskipped: dict[str, datetime | None] = field(default_factory=dict)
+    # The next firings of every enabled schedule (``PreviewItemOut``: at, window_end, skipped).
+    previews: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     weather: dict[str, dict[str, Any]] = field(default_factory=dict)
     # Relations the token holds on each target; missing while unknown.
     permissions: dict[str, frozenset[str]] = field(default_factory=dict)
@@ -79,8 +82,11 @@ class SchedulerCoordinator(MowDeckServiceCoordinator[SchedulerData]):
             data.runs[schedule_id] = await self.client.list_schedule_runs(
                 schedule_id, limit=RUNS_PER_SCHEDULE
             )
+            if not schedule.get("enabled"):
+                continue
+            preview = await self.client.preview_schedule(schedule_id, count=PREVIEW_COUNT)
+            data.previews[schedule_id] = preview
             if _next_is_skipped(schedule):
-                preview = await self.client.preview_schedule(schedule_id, count=PREVIEW_COUNT)
                 data.next_unskipped[schedule_id] = next(
                     (parse_time(i.get("at")) for i in preview if not i.get("skipped")), None
                 )

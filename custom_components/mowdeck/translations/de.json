@@ -137,6 +137,11 @@
         "name": "KI-Analyse starten"
       }
     },
+    "calendar": {
+      "mowing_schedule": {
+        "name": "Mähplan"
+      }
+    },
     "camera": {
       "camera": {
         "name": "Kamera"
