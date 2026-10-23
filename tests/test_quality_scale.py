@@ -1,4 +1,4 @@
-"""quality_scale.yaml claims Silver: every Bronze and Silver rule is done or exempt."""
+"""quality_scale.yaml claims Gold: every Bronze, Silver and Gold rule is done or exempt."""
 
 from __future__ import annotations
 
@@ -39,11 +39,35 @@ BRONZE_AND_SILVER = {
     "test-coverage",
 }
 
+GOLD = {
+    "devices",
+    "diagnostics",
+    "discovery",
+    "discovery-update-info",
+    "docs-data-update",
+    "docs-examples",
+    "docs-known-limitations",
+    "docs-supported-devices",
+    "docs-supported-functions",
+    "docs-troubleshooting",
+    "docs-use-cases",
+    "dynamic-devices",
+    "entity-category",
+    "entity-device-class",
+    "entity-disabled-by-default",
+    "entity-translations",
+    "exception-translations",
+    "icon-translations",
+    "reconfiguration-flow",
+    "repair-issues",
+    "stale-devices",
+}
 
-def test_silver_rules_are_met() -> None:
-    """No Bronze or Silver rule is todo; exemptions carry a reason."""
+
+def test_gold_rules_are_met() -> None:
+    """No Bronze, Silver or Gold rule is todo; exemptions carry a reason."""
     rules = load_yaml_dict(str(QUALITY_SCALE))["rules"]
-    for rule in BRONZE_AND_SILVER:
+    for rule in BRONZE_AND_SILVER | GOLD:
         value = rules[rule]
         status = value if isinstance(value, str) else value["status"]
         assert status in ("done", "exempt"), rule

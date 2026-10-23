@@ -1,4 +1,4 @@
-# Home Assistant integration quality scale of the MowDeck integration: Silver.
+# Home Assistant integration quality scale of the MowDeck integration: Gold.
 # https://developers.home-assistant.io/docs/core/integration-quality-scale/
 rules:
   # Bronze
@@ -51,12 +51,12 @@ rules:
     status: exempt
     comment: No discovery.
   docs-data-update: done
-  docs-examples: todo
+  docs-examples: done
   docs-known-limitations: done
-  docs-supported-devices: todo
+  docs-supported-devices: done
   docs-supported-functions: done
   docs-troubleshooting: done
-  docs-use-cases: todo
+  docs-use-cases: done
   dynamic-devices: done
   entity-category: done
   entity-device-class: done
