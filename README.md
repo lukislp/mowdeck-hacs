@@ -66,6 +66,7 @@ The flow exchanges the token, reads `/api/v1/identity/me` and lists the mowers; 
 | Vision proposals | the newest per mower, polled, own coordinator; changes pushed over the WebSocket (`vision_proposal`) | every 10 minutes; live while the socket is up |
 | Heatmap layers (missed area, heatmap images) | polled, own coordinator: the coverage layer of every mower, the other layers only while their image is enabled | every 30 minutes (a layer is a query over a week of positions) |
 | Planned path of the running job (map image) | polled while a job runs | at most every 30 s |
+| RTK base stations | the list polled, own coordinator; their live values come with the linked mowers' states | every 10 minutes; values live |
 
 Each MowDeck service has its own coordinator: when one fails, only its entities turn unavailable. When one answers "forbidden" (403), a Repairs issue names the permission the token lacks and links to MowDeck's API token page (`/settings/api-tokens`); it disappears with the next successful update.
 
