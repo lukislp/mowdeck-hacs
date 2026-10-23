@@ -138,6 +138,33 @@
       },
       "stop_spot_run": {
         "name": "Punktmähen stoppen"
+      },
+      "leave_dock": {
+        "name": "Aus der Ladestation fahren"
+      },
+      "restart_mower": {
+        "name": "Mäher neu starten"
+      },
+      "sync_map": {
+        "name": "Karte neu einlesen"
+      },
+      "relocate_dock": {
+        "name": "Ladestation neu einmessen"
+      },
+      "resync_rtk": {
+        "name": "RTK- und Ladestationsposition neu lesen"
+      },
+      "emergency_nudge_forward": {
+        "name": "Notfall-Schub vorwärts"
+      },
+      "emergency_nudge_back": {
+        "name": "Notfall-Schub rückwärts"
+      },
+      "emergency_nudge_left": {
+        "name": "Notfall-Schub links"
+      },
+      "emergency_nudge_right": {
+        "name": "Notfall-Schub rechts"
       }
     },
     "calendar": {
@@ -835,6 +862,9 @@
     },
     "command_forbidden": {
       "message": "Das API-Token darf {command} nicht senden. Gib dem Token in der MowDeck-App die Berechtigung {permission}."
+    },
+    "command_refused": {
+      "message": "Der Mäher hat {command} abgelehnt ({status}): {reason}"
     },
     "camera_relay_unsupported": {
       "message": "Das Kamera-Relay von MowDeck kann diesen Mäher nicht bedienen. Aktiviere in MowDeck das Kamera-Relay (und für Mammotion-Mäher die Agora-Bridge)"

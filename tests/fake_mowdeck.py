@@ -331,6 +331,9 @@ class FakeMowDeck:
     health: dict[str, dict[str, Any]] = field(default_factory=dict)
     commands: list[dict[str, Any]] = field(default_factory=list)
     forbid_commands: bool = False
+    # The fake controller's verdict per command kind, sent as a Realtime command_result:
+    # (status, reason). Kinds without an entry get no result.
+    command_results: dict[str, tuple[str, str | None]] = field(default_factory=dict)
     # Relations POST /identity/me/permissions grants on every visible mower (None: the
     # endpoint answers 404 like a MowDeck without it).
     relations: set[str] | None = field(
@@ -942,6 +945,14 @@ class FakeMowDeck:
         kind = body["command"]["kind"]
         if kind == "start_mow":
             await self.push_state(mower_id, mower_state(activity="mowing", charging=False))
+        verdict = self.command_results.get(kind)
+        if kind == "set_setting" and (verdict is None or verdict[0] in ("accepted", "executed")):
+            settings = {**(self.states[mower_id].get("settings") or {})}
+            settings[body["command"]["key"]] = body["command"]["value"]
+            await self.push_state(mower_id, {**self.states[mower_id], "settings": settings})
+        if verdict is not None:
+            result = {"command_id": command_id, "status": verdict[0], "reason": verdict[1]}
+            await self.push({"type": "command_result", "mower_id": mower_id, "result": result})
         return web.json_response(
             {
                 "command_id": command_id,

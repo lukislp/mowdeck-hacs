@@ -1,15 +1,21 @@
 """Buttons of a MowDeck mower: emergency stop (optional), return to dock, end the job, check
-for firmware, record a blade change, and run or skip each schedule that mows it."""
+for firmware, record a blade change, the maintenance commands and emergency nudges the mower
+supports, and run or skip each schedule that mows it."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
+from homeassistant.components.button import (
+    ButtonDeviceClass,
+    ButtonEntity,
+    ButtonEntityDescription,
+)
 from homeassistant.const import EntityCategory, Platform
 from homeassistant.core import HomeAssistant
 
+from .commands import async_send_confirmed
 from .const import (
     CAN_CONTROL,
     CAN_DRIVE,
@@ -72,6 +78,7 @@ async def async_setup_entry(
         return buttons
 
     async_add_mower_entities(entry, async_add_entities, entities, domain=Platform.BUTTON)
+    async_add_mower_entities(entry, async_add_entities, maintenance_buttons, domain=Platform.BUTTON)
 
     vision = entry.runtime_data.vision
     async_add_mower_entities(
@@ -130,6 +137,131 @@ class MowDeckButton(MowDeckEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Send the command."""
         await self.async_send_command(dict(self.entity_description.command))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConfirmedButtonDescription(ButtonEntityDescription):
+    """A button whose command the mower may refuse; ``relation`` gates it, ``permission`` is
+    the token permission a 403 names."""
+
+    command: dict[str, Any]
+    relation: str
+    permission: str
+
+
+# Maintenance commands (ADR 0048 in lukislp/mowdeck), offered as the mower's capabilities list
+# them (``maintenance``). Leaving the dock is ordinary control (``mower.control``, it is what a
+# start does first): enabled, next to the other controls. The others reset or reread parts of
+# the mower (a restart takes it offline for a minute or two, a dock relocation makes it forget
+# where its charging station is): configuration, disabled by default.
+MAINTENANCE: tuple[ConfirmedButtonDescription, ...] = (
+    ConfirmedButtonDescription(
+        key="leave_dock",
+        command={"kind": "leave_dock"},
+        relation=CAN_CONTROL,
+        permission="mower.control",
+    ),
+    ConfirmedButtonDescription(
+        key="restart_mower",
+        command={"kind": "restart_mower"},
+        relation=CAN_MANAGE_MOWERS,
+        permission="fleet.manage",
+        device_class=ButtonDeviceClass.RESTART,
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
+    ),
+    ConfirmedButtonDescription(
+        key="sync_map",
+        command={"kind": "sync_map"},
+        relation=CAN_MANAGE_MOWERS,
+        permission="fleet.manage",
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
+    ),
+    ConfirmedButtonDescription(
+        key="relocate_dock",
+        command={"kind": "relocate_dock"},
+        relation=CAN_MANAGE_MOWERS,
+        permission="fleet.manage",
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
+    ),
+    ConfirmedButtonDescription(
+        key="resync_rtk",
+        command={"kind": "resync_rtk"},
+        relation=CAN_MANAGE_MOWERS,
+        permission="fleet.manage",
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
+    ),
+)
+
+# Mammotion-HA's emergency nudges (docs/dev/home-assistant.md in lukislp/mowdeck): one
+# manual_drive frame at 0.4 of full stick that the dead-man timer ends after 500 ms, blades off.
+NUDGE_SPEED = 0.4
+NUDGE_TTL_MS = 500
+
+
+def _nudge(key: str, linear: float, angular: float) -> ConfirmedButtonDescription:
+    return ConfirmedButtonDescription(
+        key=key,
+        command={
+            "kind": "manual_drive",
+            "linear": linear,
+            "angular": angular,
+            "ttl_ms": NUDGE_TTL_MS,
+        },
+        relation=CAN_DRIVE,
+        permission="mower.drive",
+        entity_category=EntityCategory.CONFIG,
+        entity_registry_enabled_default=False,
+    )
+
+
+NUDGE_FORWARD = _nudge("emergency_nudge_forward", NUDGE_SPEED, 0.0)
+NUDGE_BACK = _nudge("emergency_nudge_back", -NUDGE_SPEED, 0.0)
+# Left is a positive turn.
+NUDGE_LEFT = _nudge("emergency_nudge_left", 0.0, NUDGE_SPEED)
+NUDGE_RIGHT = _nudge("emergency_nudge_right", 0.0, -NUDGE_SPEED)
+
+
+def maintenance_buttons(coordinator: MowDeckCoordinator, mower_id: str) -> list[ButtonEntity]:
+    """The maintenance commands the mower lists, and the nudges where MowDeck can drive it
+    (backwards only where it may reverse), each only for tokens that may send it."""
+    caps = coordinator.data.capabilities.get(mower_id) or {}
+    offered = set(caps.get("maintenance") or [])
+    descriptions = [d for d in MAINTENANCE if d.key in offered]
+    if caps.get("manual_drive"):
+        descriptions += [NUDGE_FORWARD, NUDGE_LEFT, NUDGE_RIGHT]
+        if caps.get("drive_reverse"):
+            descriptions.append(NUDGE_BACK)
+    return [
+        ConfirmedButton(coordinator, mower_id, d)
+        for d in descriptions
+        if coordinator.permitted(mower_id, d.relation)
+    ]
+
+
+class ConfirmedButton(MowDeckEntity, ButtonEntity):
+    """Sends one command and raises when the mower refuses it (``commands.py``): a restart
+    while the mower is not at rest, a nudge while a job runs, ..."""
+
+    entity_description: ConfirmedButtonDescription
+
+    def __init__(
+        self,
+        coordinator: MowDeckCoordinator,
+        mower_id: str,
+        description: ConfirmedButtonDescription,
+    ) -> None:
+        """Create the button from its description."""
+        super().__init__(coordinator, mower_id, description.key)
+        self.entity_description = description
+
+    async def async_press(self) -> None:
+        """Send the command and wait for the mower's verdict."""
+        description = self.entity_description
+        await async_send_confirmed(self, dict(description.command), description.permission)
 
 
 class FirmwareCheckButton(MowDeckEntity, ButtonEntity):
