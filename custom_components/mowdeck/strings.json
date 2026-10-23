@@ -140,6 +140,11 @@
         "name": "Stop spot run"
       }
     },
+    "calendar": {
+      "mowing_schedule": {
+        "name": "Mowing schedule"
+      }
+    },
     "camera": {
       "camera": {
         "name": "Camera"

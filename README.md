@@ -60,7 +60,7 @@ The flow exchanges the token, reads `/api/v1/identity/me` and lists the mowers; 
 | Mower list | polled | every 5 minutes while the socket is up (finds new and removed mowers) |
 | Capabilities, map, token permissions | polled | every 10 minutes |
 | Health totals (blade hours, mowing hours, distance, battery cycles) | polled, own coordinator | every 15 minutes |
-| Schedules, their runs, the rain decision | polled, own coordinator | every 5 minutes and right after a schedule action |
+| Schedules, their runs, the next 10 firings of each enabled schedule, the rain decision | polled, own coordinator | every 5 minutes and right after a schedule action |
 | Notifications | pushed over the WebSocket (`notification` messages) | live; nothing is polled (see [Notifications](#notifications)) |
 | Command results | pushed over the WebSocket | live |
 | Vision proposals | the newest per mower, polled, own coordinator; changes pushed over the WebSocket (`vision_proposal`) | every 10 minutes; live while the socket is up |
@@ -109,6 +109,7 @@ Per mower one device (manufacturer Mammotion, model from the capabilities, firmw
 | Firmware | `update.luba_firmware` | installed and offered firmware with release notes and progress (`firmware_info`); install sends `firmware_update` (MowDeck requires the mower docked with enough battery; needs `fleet.manage`); only for mowers whose connection can update firmware |
 | Schedule *name* | `switch.luba_schedule_morning` | one per MowDeck schedule of the mower or of one of its groups: on = enabled (`PATCH /scheduler/schedules/{id}`). Attributes: days, start time, window, areas, next run, why MowDeck disabled it. Needs `schedule.edit` and `mower.control`. **MowDeck makes whoever changes a schedule its owner**, so after a toggle in Home Assistant the schedule fires on behalf of the API token (and stops when the token is revoked) |
 | Run *name* now, Skip next run of *name* | `button.luba_run_morning_now`, `button.luba_skip_next_run_of_morning` | start the schedule now without its rain pause (`mower.control`); skip its next firing (`schedule.edit`) |
+| Mowing schedule | `calendar.luba_mowing_schedule` | the next mowing windows of the mower's enabled schedules (its own and its groups'): the next 10 firings each schedule previews (`GET /scheduler/schedules/{id}/preview`), from the start to the end of the window, named after the schedule, the description naming its areas (none: every area). Firings skipped with **Skip next run** are left out; the state is on while a window runs. Read only |
 | Next mowing | `sensor.luba_next_mowing` | the earliest next firing of the mower's enabled schedules (a skipped firing is passed over), attribute `schedule` |
 | Last schedule run | `sensor.luba_last_schedule_run` | outcome of the newest run of the mower: `started`, `skipped_rain`, `skipped_permission`, `skipped_window`, `skipped_mower_busy`, `skipped_manual`, `failed`; attributes `schedule`, `scheduled_for`, `trigger`, `details` |
 | Rain hold | `binary_sensor.luba_rain_hold` | on while MowDeck's rain pause holds the mower's runs (`GET /scheduler/weather/{id}` with the rain settings of the mower's next schedule, MowDeck's defaults without one); attributes `verdict`, `reason`, `wet`, recent rain, provider |

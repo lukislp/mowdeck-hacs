@@ -78,6 +78,9 @@
     "image": {
       "ai_recovery_image": { "default": "mdi:camera-iris" },
       "ai_recovery_map": { "default": "mdi:map-search-outline" }
+    },
+    "calendar": {
+      "mowing_schedule": { "default": "mdi:calendar-month" }
     }
   },
   "services": {
