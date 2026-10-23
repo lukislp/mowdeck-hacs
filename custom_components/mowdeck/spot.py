@@ -16,6 +16,8 @@ import math
 from collections.abc import Sequence
 from typing import Any, Final
 
+from .geo import from_wgs84
+
 # Limits of the web app's spot sheet (MowDeck itself takes circles up to 10 m).
 RADIUS_MIN_M: Final = 0.5
 RADIUS_MAX_M: Final = 3.0
@@ -55,22 +57,7 @@ FINAL_RUN_STATES: Final = frozenset({"done", "aborted", "failed"})
 # Activities of a running job (the mower is busy).
 JOB_ACTIVITIES: Final = frozenset({"mowing", "paused", "returning"})
 
-# WGS84 equatorial radius (mowdeck_control.geo.EARTH_RADIUS_M).
-EARTH_RADIUS_M: Final = 6_378_137.0
-
 type Point = tuple[float, float]
-
-
-def from_wgs84(reference: dict[str, Any], lat: float, lon: float) -> Point:
-    """``[lat, lon]`` to the map's local metres (``mowdeck_control.geo``)."""
-    origin_lat = float(reference["origin_lat"])
-    north = math.radians(lat - origin_lat) * EARTH_RADIUS_M
-    lon_scale = EARTH_RADIUS_M * math.cos(math.radians(origin_lat))
-    east = math.radians(lon - float(reference["origin_lon"])) * lon_scale
-    rotation = math.radians(float(reference.get("rotation_deg") or 0.0))
-    x = east * math.cos(rotation) + north * math.sin(rotation)
-    y = -east * math.sin(rotation) + north * math.cos(rotation)
-    return x, y
 
 
 def circle_polygon(center: Point, radius_m: float, corners: int = CIRCLE_CORNERS) -> list[Point]:

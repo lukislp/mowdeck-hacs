@@ -16,6 +16,7 @@ from homeassistant.exceptions import ServiceValidationError
 from . import spot
 from .const import DOMAIN, SPEED_DECIMALS
 from .entity import MowDeckEntity, async_add_mower_entities
+from .geo import from_wgs84
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -196,7 +197,7 @@ class MowDeckLawnMower(MowDeckEntity, LawnMowerEntity):
         reference = mower_map.get("reference")
         if not isinstance(reference, dict):
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="no_map")
-        polygon = spot.circle_polygon(spot.from_wgs84(reference, *center), radius_m)
+        polygon = spot.circle_polygon(from_wgs84(reference, *center), radius_m)
         area_id = spot.containing_area(polygon, self.coordinator.areas(self.mower_id))
         if area_id is None:
             raise _invalid("spot_outside_areas")

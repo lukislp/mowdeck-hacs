@@ -15,6 +15,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.mowdeck import spot
 from custom_components.mowdeck.const import DOMAIN
+from custom_components.mowdeck.geo import from_wgs84
 
 from .conftest import wait_for
 from .fake_mowdeck import MOWER_ID, FakeMowDeck, mower_state
@@ -310,7 +311,7 @@ def test_geometry_matches_the_web_app() -> None:
     """The local frame (with rotation), the circle and the turn style rules."""
     reference = {"origin_lat": 48.137, "origin_lon": 11.575, "rotation_deg": 90}
     lat, lon = at(0, 10)
-    x, y = spot.from_wgs84(reference, lat, lon)
+    x, y = from_wgs84(reference, lat, lon)
     assert (x, y) == pytest.approx((10.0, 0.0), abs=1e-6)
     ring = spot.circle_polygon((1.0, 2.0), 1.5)
     assert ring[0] == (2.5, 2.0)
