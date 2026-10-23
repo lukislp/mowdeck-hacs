@@ -54,7 +54,8 @@
       "drive_speed": { "default": "mdi:gamepad-variant-outline" },
       "mow_angle": { "default": "mdi:angle-acute" },
       "mow_border_laps": { "default": "mdi:vector-square" },
-      "mow_path_spacing": { "default": "mdi:arrow-expand-horizontal" }
+      "mow_path_spacing": { "default": "mdi:arrow-expand-horizontal" },
+      "blade_threshold": { "default": "mdi:saw-blade" }
     },
     "select": {
       "area": { "default": "mdi:texture-box" },

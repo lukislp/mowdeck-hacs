@@ -1,5 +1,6 @@
-"""Numbers of a MowDeck mower: blade height, mowing speed, the manual-drive speed setting and
-the angle, border laps and path spacing of the mowing defaults.
+"""Numbers of a MowDeck mower: blade height, mowing speed, the manual-drive speed setting, the
+angle, border laps and path spacing of the mowing defaults, and MowDeck's blade change
+reminder.
 
 Ranges come from the mower's capabilities, limited to what the Fleet command API accepts.
 Speeds are read, shown and sent with two decimals (``SPEED_DECIMALS``).
@@ -22,6 +23,7 @@ from homeassistant.const import (
     Platform,
     UnitOfLength,
     UnitOfSpeed,
+    UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
 
@@ -35,6 +37,7 @@ from .const import (
     API_SPACING_MIN_M,
     API_SPEED_MAX_MPS,
     CAN_CONTROL,
+    CAN_MANAGE_MOWERS,
     DEFAULT_MIN_SPEED_MPS,
     SPEED_DECIMALS,
     SPEED_STEP_MPS,
@@ -47,9 +50,12 @@ if TYPE_CHECKING:
 
     from . import MowDeckConfigEntry
     from .coordinator import MowDeckCoordinator
+    from .health import HealthCoordinator
 
 PARALLEL_UPDATES = 1
 
+# BladeThresholdIn.hours: above 0 and at most 10 000 hours.
+BLADE_THRESHOLD_MAX_HOURS = 10_000
 # DriveSpeedSetting.step_mps when the capabilities name none.
 DEFAULT_DRIVE_STEP_MPS = 0.1
 
@@ -86,6 +92,21 @@ async def async_setup_entry(
         return numbers
 
     async_add_mower_entities(entry, async_add_entities, entities, domain=Platform.NUMBER)
+
+    health = entry.runtime_data.health
+    coordinator = entry.runtime_data.coordinator
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        lambda c, m: (
+            [BladeThresholdNumber(c, m, health)]
+            if blade_threshold_settable(health, m) and c.permitted(m, CAN_MANAGE_MOWERS)
+            else []
+        ),
+        domain=Platform.NUMBER,
+        fingerprint=lambda m: (coordinator.fingerprint(m), blade_threshold_settable(health, m)),
+        listen=[health],
+    )
 
 
 class BladeHeightNumber(MowDeckEntity, NumberEntity):
@@ -348,3 +369,55 @@ class PathSpacingNumber(MowDeckEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Save the spacing (in metres) into the mowing defaults."""
         await async_save_mow_defaults(self, {"spacing_m": round(value / CM_PER_M, 3)})
+
+
+def blade_threshold_settable(health: HealthCoordinator, mower_id: str) -> bool:
+    """MowDeck lets the reminder threshold be set per mower (0.8: the health totals name
+    whether the mower has its own)."""
+    return "blade_hours_threshold_custom" in (health.data.totals.get(mower_id) or {})
+
+
+class BladeThresholdNumber(MowDeckEntity, NumberEntity):
+    """MowDeck's blade change reminder: the blade hours since the change after which MowDeck
+    notifies (``PUT .../health/blade-threshold``, ``fleet.manage``). It concerns MowDeck's own
+    count; the mower's own warning (``device_blade_warn_hours``) stays as set in the vendor
+    app."""
+
+    entity_description = NumberEntityDescription(
+        key="blade_threshold",
+        device_class=NumberDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.HOURS,
+        native_min_value=1,
+        native_max_value=BLADE_THRESHOLD_MAX_HOURS,
+        native_step=1,
+        mode=NumberMode.BOX,
+        entity_category=EntityCategory.CONFIG,
+    )
+
+    def __init__(
+        self, coordinator: MowDeckCoordinator, mower_id: str, health: HealthCoordinator
+    ) -> None:
+        """Create the number."""
+        super().__init__(coordinator, mower_id, "blade_threshold", service=health)
+        self._health = health
+
+    @property
+    def native_value(self) -> float | None:
+        """The threshold in effect (the mower's own, else MowDeck's default)."""
+        value = (self._health.data.totals.get(self.mower_id) or {}).get("blade_hours_threshold")
+        return float(value) if isinstance(value, int | float) else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Whether the mower has its own threshold or MowDeck's default applies."""
+        totals = self._health.data.totals.get(self.mower_id) or {}
+        return {"custom": bool(totals.get("blade_hours_threshold_custom"))}
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the mower's own threshold; the health totals of the answer show at once."""
+        totals = await self.async_call_api(
+            self.coordinator.client.set_blade_threshold(self.mower_id, float(value)),
+            "blade_threshold",
+            "fleet.manage",
+        )
+        self._health.async_set_totals(self.mower_id, totals)

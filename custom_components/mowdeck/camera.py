@@ -11,13 +11,24 @@ but never published, such as the LUBA 2 AWD X's rear camera) get no entity, and 
 camera turned silent is unavailable until a later session finds it delivering again.
 
 The signalling is :mod:`.camera_relay`: one lease and one WHEP session per open stream, the
-lease renewed while the stream is open and released when it closes. There is no still image:
-MowDeck offers no snapshot to API clients (the relay's frame tap is internal to MowDeck).
+lease renewed while the stream is open and released when it closes.
+
+Still image (picture cards, thumbnails): the mower's ``Camera`` shows MowDeck's still image
+(``GET /fleet/mowers/{id}/camera/snapshot``, MowDeck 0.8). Every image costs the mower a short
+camera start when no stream runs, so one is kept for ``STILL_MAX_AGE`` and a newer one is
+fetched in the background while the old one is shown; only the very first request waits for
+it (``STILL_WAIT``). A MowDeck without the endpoint, a mower that cannot take photos or a token
+that may not are asked again only after ``STILL_UNSUPPORTED_RETRY``, an offline or sleeping
+mower after ``STILL_RETRY``. The further camera entities have no still image (the endpoint
+takes the mower's first camera).
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.camera import (
@@ -32,7 +43,9 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.translation import async_get_exception_message
+from homeassistant.util import dt as dt_util
 
+from .api import MowDeckApiError, MowDeckError, MowDeckForbiddenError, MowDeckNotFoundError
 from .camera_relay import CameraRelayError, RelaySession, RelayViewer
 from .const import DOMAIN
 from .entity import MowDeckEntity
@@ -51,6 +64,12 @@ PARALLEL_UPDATES = 0
 STORAGE_VERSION = 1
 # Placements with a translated entity name (CameraPlacement in MowDeck's contracts).
 PLACEMENTS = frozenset({"front_left", "front_right", "front", "rear"})
+# Still images: how long one is shown before a newer one is fetched, how long the first request
+# waits for one, and when a refused request is tried again.
+STILL_MAX_AGE = timedelta(minutes=5)
+STILL_WAIT = 8.0
+STILL_RETRY = timedelta(minutes=1)
+STILL_UNSUPPORTED_RETRY = timedelta(hours=1)
 
 
 def storage_key(entry_id: str) -> str:
@@ -194,6 +213,10 @@ class MowDeckCamera(MowDeckEntity, Camera):
         self._catalog = catalog
         self._camera_id = camera_id
         self._viewers: dict[str, RelayViewer] = {}
+        self._still: bytes | None = None
+        self._still_at: datetime | None = None
+        self._still_retry_at: datetime | None = None
+        self._still_task: asyncio.Task[None] | None = None
         info = catalog.cameras(mower_id).get(camera_id or "", {})
         placement = info.get("placement")
         if camera_id is None:
@@ -241,13 +264,52 @@ class MowDeckCamera(MowDeckEntity, Camera):
         viewers, self._viewers = list(self._viewers.values()), {}
         for viewer in viewers:
             await viewer.async_close()
+        if self._still_task is not None:
+            self._still_task.cancel()
         await super().async_will_remove_from_hass()
 
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
-        """No still image: MowDeck offers no snapshot to API clients."""
-        return None
+        """MowDeck's still image of the mower's first camera (the ``Camera`` entity only): the
+        kept one, refreshed in the background once older than ``STILL_MAX_AGE``; the first
+        request waits up to ``STILL_WAIT`` for it."""
+        if self._camera_id is not None:
+            return None
+        now = dt_util.utcnow()
+        stale = self._still_at is None or now - self._still_at >= STILL_MAX_AGE
+        may_ask = self._still_retry_at is None or now >= self._still_retry_at
+        if stale and may_ask and self._still_task is None:
+            self._still_task = self.hass.async_create_background_task(
+                self._async_fetch_still(), f"{DOMAIN} still image {self.mower_id}"
+            )
+        if self._still is None and self._still_task is not None:
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(self._still_task), STILL_WAIT)
+        return self._still
+
+    async def _async_fetch_still(self) -> None:
+        now = dt_util.utcnow()
+        try:
+            blob = await self.coordinator.client.get_camera_snapshot(self.mower_id)
+        except (MowDeckNotFoundError, MowDeckForbiddenError) as err:
+            _LOGGER.debug("No still image of %s (%s); asking again later", self.mower_id, err)
+            self._still_retry_at = now + STILL_UNSUPPORTED_RETRY
+        except MowDeckApiError as err:
+            unsupported = err.status == 409
+            self._still_retry_at = now + (STILL_UNSUPPORTED_RETRY if unsupported else STILL_RETRY)
+            _LOGGER.debug("No still image of %s: %s", self.mower_id, err)
+        except MowDeckError as err:
+            self._still_retry_at = now + STILL_RETRY
+            _LOGGER.debug("No still image of %s: %s", self.mower_id, err)
+        else:
+            if blob.content_type.startswith("image/") and blob.content:
+                self._still = blob.content
+                self._still_at = now
+                self._still_retry_at = None
+                self.content_type = blob.content_type
+        finally:
+            self._still_task = None
 
     async def async_handle_async_webrtc_offer(
         self, offer_sdp: str, session_id: str, send_message: WebRTCSendMessage

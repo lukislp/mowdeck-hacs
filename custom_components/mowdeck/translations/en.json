@@ -188,6 +188,14 @@
       },
       "mow_path_spacing": {
         "name": "Path spacing"
+      },
+      "blade_threshold": {
+        "name": "Blade change reminder",
+        "state_attributes": {
+          "custom": {
+            "name": "Set for this mower"
+          }
+        }
       }
     },
     "select": {

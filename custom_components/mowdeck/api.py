@@ -436,6 +436,13 @@ class MowDeckClient:
         """``DELETE .../camera/session/{lease_id}``: end the lease (idempotent)."""
         await self._request("DELETE", f"{FLEET}/mowers/{mower_id}/camera/session/{lease_id}")
 
+    async def get_camera_snapshot(self, mower_id: str) -> Blob:
+        """``GET /fleet/mowers/{id}/camera/snapshot`` (MowDeck 0.8): a still image of the mower's
+        camera, at most one new one per mower every 30 s (``can_view``, plan feature
+        ``camera``). 409 when the connection cannot take photos, 503 when the mower is offline,
+        asleep or a camera limit refuses; a MowDeck before 0.8 answers 404."""
+        return await self._get_bytes(f"{FLEET}/mowers/{mower_id}/camera/snapshot")
+
     def media_url(self, url: str) -> str:
         """An absolute URL for a WHEP URL of the relay: an absolute path is on the MowDeck
         origin, an ``http(s)`` URL stays as it is."""
@@ -531,6 +538,18 @@ class MowDeckClient:
         return dict(
             await self._request(
                 "POST", f"{TELEMETRY}/mowers/{mower_id}/health/blade-reset", json=body
+            )
+        )
+
+    async def set_blade_threshold(self, mower_id: str, hours: float | None) -> dict[str, Any]:
+        """``PUT /telemetry/mowers/{id}/health/blade-threshold`` (MowDeck 0.8,
+        ``can_manage_mowers``): the mower's blade reminder threshold in hours, None for the
+        default; answers the health totals."""
+        return dict(
+            await self._request(
+                "PUT",
+                f"{TELEMETRY}/mowers/{mower_id}/health/blade-threshold",
+                json={"hours": hours},
             )
         )
 

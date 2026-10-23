@@ -3,18 +3,21 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
+from datetime import timedelta
 from typing import Any
 from unittest.mock import patch
 
 import pytest
-from homeassistant.components.camera import StreamType
+from homeassistant.components.camera import StreamType, async_get_image
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, State
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 
-from custom_components.mowdeck import camera_relay
+from custom_components.mowdeck import camera, camera_relay
 from custom_components.mowdeck.camera_relay import (
     OfferDescription,
     RelaySession,
@@ -23,6 +26,9 @@ from custom_components.mowdeck.camera_relay import (
 
 from .conftest import wait_for
 from .fake_mowdeck import ANSWER_SDP, MOWER_ID, FakeMowDeck
+
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 16 + b"\xff\xd9"
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
 
 CAMERA = "camera.luba_camera"
 FRONT_RIGHT = "camera.luba_front_right_camera"
@@ -152,11 +158,61 @@ async def test_camera_entity_without_a_stream(
 
 
 @pytest.mark.usefixtures("camera_entry")
-async def test_no_still_image(hass: HomeAssistant, hass_client: Any) -> None:
-    """MowDeck offers no snapshot to API clients: the image endpoint has nothing to serve."""
+async def test_no_still_image_before_mowdeck_0_8(
+    hass: HomeAssistant, hass_client: Any, fake_api: FakeMowDeck
+) -> None:
+    """A MowDeck without the snapshot endpoint (404): no picture, asked again only later."""
     client = await hass_client()
     response = await client.get(f"/api/camera_proxy/{CAMERA}")
     assert response.status >= 400
+    await client.get(f"/api/camera_proxy/{CAMERA}")
+    assert fake_api.snapshot_requests == 1
+    assert not fake_api.lease_history
+
+
+@pytest.mark.usefixtures("camera_entry")
+async def test_still_image(hass: HomeAssistant, fake_api: FakeMowDeck) -> None:
+    """MowDeck's still image: read once, kept for five minutes, then refreshed in the
+    background while the kept one is shown; no stream is opened for it."""
+    fake_api.snapshot = (JPEG, "image/jpeg")
+    image = await async_get_image(hass, CAMERA)
+    assert (image.content, image.content_type) == (JPEG, "image/jpeg")
+    await async_get_image(hass, CAMERA)
+    assert fake_api.snapshot_requests == 1
+    assert not fake_api.lease_history
+
+    fake_api.snapshot = (PNG, "image/png")
+    with patch("custom_components.mowdeck.camera.STILL_MAX_AGE", timedelta(0)):
+        stale = await async_get_image(hass, CAMERA)
+        assert stale.content == JPEG  # the kept image while the new one is fetched
+        await wait_for(hass, lambda: fake_api.snapshot_requests == 2)
+        await hass.async_block_till_done()
+    fresh = await async_get_image(hass, CAMERA)
+    assert (fresh.content, fresh.content_type) == (PNG, "image/png")
+
+
+@pytest.mark.parametrize(
+    ("status", "retry"), [(409, "STILL_UNSUPPORTED_RETRY"), (503, "STILL_RETRY")]
+)
+@pytest.mark.usefixtures("camera_entry")
+async def test_still_image_refused(
+    hass: HomeAssistant, fake_api: FakeMowDeck, status: int, retry: str
+) -> None:
+    """A mower that cannot take photos (409) is asked again after an hour, an offline or
+    sleeping one (503) after a minute."""
+    fake_api.snapshot = (JPEG, "image/jpeg")
+    fake_api.snapshot_status = status
+    with pytest.raises(HomeAssistantError):
+        await async_get_image(hass, CAMERA)
+    with pytest.raises(HomeAssistantError):
+        await async_get_image(hass, CAMERA)
+    assert fake_api.snapshot_requests == 1
+    fake_api.snapshot_status = None
+    later = dt_util.utcnow() + getattr(camera, retry) + timedelta(seconds=1)
+    with patch("custom_components.mowdeck.camera.dt_util.utcnow", return_value=later):
+        image = await async_get_image(hass, CAMERA)
+    assert image.content == JPEG
+    assert fake_api.snapshot_requests == 2
 
 
 # --- Offer and answer ----------------------------------------------------------------------------

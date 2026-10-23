@@ -374,6 +374,12 @@ class FakeMowDeck:
     plan_route_found: bool = True
     firmware_check_status: int | None = None
     blade_resets: list[dict[str, Any]] = field(default_factory=list)
+    # MowDeck 0.8: the per-mower blade threshold and the camera still image (None: a MowDeck
+    # before 0.8, the routes answer a plain 404).
+    blade_thresholds: list[dict[str, Any]] | None = None
+    snapshot: tuple[bytes, str] | None = None
+    snapshot_status: int | None = None
+    snapshot_requests: int = 0
     fail_requests: int = 0
     exchanges: int = 0
     requests: list[str] = field(default_factory=list)
@@ -498,6 +504,10 @@ class FakeMowDeck:
             "/api/v1/telemetry/mowers/{mower_id}/health/blade-reset", self._blade_reset
         )
         app.router.add_get("/api/v1/fleet/mowers", self._mowers)
+        app.router.add_get("/api/v1/fleet/mowers/{mower_id}/camera/snapshot", self._snapshot)
+        app.router.add_put(
+            "/api/v1/telemetry/mowers/{mower_id}/health/blade-threshold", self._blade_threshold
+        )
         app.router.add_post("/api/v1/fleet/mowers/{mower_id}/commands", self._command)
         app.router.add_get("/api/v1/fleet/commands/{command_id}", self._get_command)
         app.router.add_get("/api/v1/telemetry/accounts/me/mowers/states", self._states)
@@ -654,6 +664,29 @@ class FakeMowDeck:
                 "blade_source": "telemetry",
             }
         )
+        return web.json_response(health)
+
+    async def _snapshot(self, request: web.Request) -> web.Response:
+        self.snapshot_requests += 1
+        if self.snapshot is None:
+            return web.Response(status=404, text="404: Not Found")
+        if self.snapshot_status is not None:
+            return problem(self.snapshot_status, "Problem", "camera-unsupported")
+        content, content_type = self.snapshot
+        return web.Response(body=content, content_type=content_type)
+
+    async def _blade_threshold(self, request: web.Request) -> web.Response:
+        if self.blade_thresholds is None:
+            return web.Response(status=404, text="404: Not Found")
+        mower_id = request.match_info["mower_id"]
+        if self.relations is not None and "can_manage_mowers" not in self.relations:
+            return problem(403, "Forbidden", "missing can_manage_mowers on the mower")
+        body = await request.json()
+        self.blade_thresholds.append(body)
+        health = self.health.setdefault(mower_id, {"mower_id": mower_id})
+        hours = body["hours"]
+        health["blade_hours_threshold"] = 50.0 if hours is None else hours
+        health["blade_hours_threshold_custom"] = hours is not None
         return web.json_response(health)
 
     # Scheduler
