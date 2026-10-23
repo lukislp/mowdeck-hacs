@@ -112,6 +112,7 @@ DEFAULT_MIN_SPEED_MPS: Final = 0.1
 COMMAND_PERMISSION: Final = {
     "emergency_stop": "mower.view",
     "set_drive_speed": "mower.drive",
+    "spot_mow": "mower.drive",
     "firmware_update": "fleet.manage",
 }
 DEFAULT_COMMAND_PERMISSION: Final = "mower.control"

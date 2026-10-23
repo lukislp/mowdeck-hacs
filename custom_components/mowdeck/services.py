@@ -16,6 +16,15 @@ from .const import (
     HEATMAP_CELLS,
     HEATMAP_LAYERS,
 )
+from .spot import PATTERNS as SPOT_PATTERNS
+from .spot import (
+    RADIUS_MAX_M,
+    RADIUS_MIN_M,
+    SPEED_DEFAULT_MPS,
+    SPEED_MAX_MPS,
+    SPEED_MIN_MPS,
+    TURN_STYLES,
+)
 
 SERVICE_START_MOW = "start_mow"
 SERVICE_EMERGENCY_STOP = "emergency_stop"
@@ -23,6 +32,7 @@ SERVICE_SET_BLADE_HEIGHT = "set_blade_height"
 SERVICE_SET_SPEED = "set_speed"
 SERVICE_GET_MAP = "get_map"
 SERVICE_GET_HEATMAP = "get_heatmap"
+SERVICE_SPOT_MOW = "spot_mow"
 
 
 @callback
@@ -94,4 +104,29 @@ def async_setup_services(hass: HomeAssistant) -> None:
         },
         func="async_get_heatmap",
         supports_response=SupportsResponse.ONLY,
+    )
+    service.async_register_platform_entity_service(
+        hass,
+        DOMAIN,
+        SERVICE_SPOT_MOW,
+        entity_domain=LAWN_MOWER_DOMAIN,
+        schema={
+            vol.Optional("latitude"): cv.latitude,
+            vol.Optional("longitude"): cv.longitude,
+            vol.Optional("zone"): cv.entity_domain("zone"),
+            vol.Optional("radius"): vol.All(
+                vol.Coerce(float), vol.Range(min=RADIUS_MIN_M, max=RADIUS_MAX_M)
+            ),
+            vol.Optional("pattern", default="spiral"): vol.In(SPOT_PATTERNS),
+            vol.Optional("angle", default=0): vol.All(vol.Coerce(float), vol.Range(0, 180)),
+            vol.Optional("speed", default=SPEED_DEFAULT_MPS): vol.All(
+                vol.Coerce(float), vol.Range(min=SPEED_MIN_MPS, max=SPEED_MAX_MPS)
+            ),
+            vol.Optional("blades", default=False): cv.boolean,
+            vol.Optional("confirm_blades", default=False): cv.boolean,
+            vol.Optional("return_to_dock", default=True): cv.boolean,
+            vol.Optional("turn_style"): vol.In(TURN_STYLES),
+        },
+        func="async_spot_mow",
+        supports_response=SupportsResponse.OPTIONAL,
     )

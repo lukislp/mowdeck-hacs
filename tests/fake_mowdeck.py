@@ -366,6 +366,9 @@ class FakeMowDeck:
     proposal_images: dict[tuple[str, int], tuple[bytes, str]] = field(default_factory=dict)
     vision_starts: list[dict[str, Any]] = field(default_factory=list)
     vision_start_problem: tuple[int, str] | None = None
+    # Planner: the bodies of POST /planner/plans and whether the transit finds a route.
+    plan_requests: list[dict[str, Any]] = field(default_factory=list)
+    plan_route_found: bool = True
     firmware_check_status: int | None = None
     blade_resets: list[dict[str, Any]] = field(default_factory=list)
     fail_requests: int = 0
@@ -516,6 +519,7 @@ class FakeMowDeck:
         app.router.add_get(vision + "/mowers/{mower_id}/proposals", self._vision_list)
         app.router.add_get(vision + "/proposals/{proposal_id}", self._vision_get)
         app.router.add_get(vision + "/proposals/{proposal_id}/images/{index}", self._vision_image)
+        app.router.add_post("/api/v1/planner/plans", self._plan)
         camera = "/api/v1/fleet/mowers/{mower_id}/camera/session"
         app.router.add_post(camera, self._camera_open)
         app.router.add_post(camera + "/{lease_id}/renew", self._camera_renew)
@@ -825,6 +829,43 @@ class FakeMowDeck:
             return problem(404, "Not found", "image purged")
         content, content_type = self.proposal_images[key]
         return web.Response(body=content, content_type=content_type)
+
+    async def _plan(self, request: web.Request) -> web.Response:
+        body = await request.json()
+        if body["mower_id"] not in {m["id"] for m in self._visible(request)}:
+            return problem(404, "Not found", "mower not found")
+        if self.relations is not None and "can_control" not in self.relations:
+            return problem(403, "Forbidden", "missing can_control on the mower")
+        self.plan_requests.append(body)
+        spot_plan = {
+            "pattern_chain": [step["pattern"] for step in body["chain"]],
+            "segments": [{"path": "_p~iF~ps|U_ulLnnqC", "blades_on": True, "speed_mps": 0.2}],
+            "plan_hash": "f" * 64,
+            "covered_area_m2": 6.1,
+            "estimated_duration_s": 95.0,
+            "native": None,
+        }
+        transit = None
+        if "transit" in body:
+            transit = {
+                "found": self.plan_route_found,
+                "from_dock": body["transit"]["from_dock"],
+                "length_m": 4.2 if self.plan_route_found else 0.0,
+                "route": [[0, 0], [1, 1]] if self.plan_route_found else [],
+                "reason": None if self.plan_route_found else "no_route: blocked by a no-go zone",
+            }
+        return web.json_response(
+            {
+                "spot_plan": spot_plan,
+                "plan_hash": spot_plan["plan_hash"],
+                "estimated_duration_s": 95.0,
+                "covered_area_m2": 6.1,
+                "area_m2": 7.0,
+                "transit": transit,
+                "turn_style": body.get("turn_style"),
+                "warnings": [],
+            }
+        )
 
     def _visible(self, request: web.Request) -> list[dict[str, Any]]:
         return self.mowers if self._account(request) == ACCOUNT_ID else []

@@ -40,6 +40,8 @@ class MowDeckButtonDescription(ButtonEntityDescription):
 
 EMERGENCY_STOP = MowDeckButtonDescription(key="emergency_stop", command={"kind": "emergency_stop"})
 RETURN_TO_DOCK = MowDeckButtonDescription(key="return_to_dock", command={"kind": "return_to_dock"})
+# Ends MowDeck's spot run: zero frame, blades off, the mower stays where it is.
+STOP_SPOT_RUN = MowDeckButtonDescription(key="stop_spot_run", command={"kind": "spot_stop"})
 # Ends the job instead of pausing it (the mower forgets its progress), then docks.
 END_JOB = MowDeckButtonDescription(
     key="end_job", command={"kind": "return_to_dock", "end_job": True}
@@ -60,7 +62,10 @@ async def async_setup_entry(
         buttons: list[ButtonEntity] = [
             MowDeckButton(coordinator, mower_id, d) for d in descriptions
         ]
-        if (coordinator.data.capabilities.get(mower_id) or {}).get("firmware_update"):
+        caps = coordinator.data.capabilities.get(mower_id) or {}
+        if caps.get("manual_drive") and coordinator.permitted(mower_id, CAN_CONTROL):
+            buttons.append(MowDeckButton(coordinator, mower_id, STOP_SPOT_RUN))
+        if caps.get("firmware_update"):
             buttons.append(FirmwareCheckButton(coordinator, mower_id))
         if coordinator.permitted(mower_id, CAN_MANAGE_MOWERS):
             buttons.append(BladeChangedButton(coordinator, mower_id, entry))

@@ -24,6 +24,7 @@ FLEET = "/api/v1/fleet"
 TELEMETRY = "/api/v1/telemetry"
 SCHEDULER = "/api/v1/scheduler"
 VISION = "/api/v1/vision"
+PLANNER = "/api/v1/planner"
 REALTIME_WS = "/api/v1/realtime/ws"
 
 # Questions per ``POST /identity/me/permissions`` (the API accepts up to 100).
@@ -401,6 +402,11 @@ class MowDeckClient:
     async def get_command(self, command_id: str) -> dict[str, Any]:
         """``GET /fleet/commands/{id}``: the command record with its status."""
         return dict(await self._request("GET", f"{FLEET}/commands/{command_id}"))
+
+    async def create_plan(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        """``POST /planner/plans``: a plan ready to start (``PlanOut`` with the ``spot_plan``
+        and, when asked, the transit route); nothing is stored. Needs ``can_control``."""
+        return dict(await self._request("POST", f"{PLANNER}/plans", json=dict(request)))
 
     # Camera relay (ADR 0045 in lukislp/mowdeck)
 
