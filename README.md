@@ -9,7 +9,7 @@ Custom integration (HACS) that brings the mowers of a [MowDeck](https://github.c
 
 - Domain `mowdeck`, IoT class `local_push`, integration type `hub` (one entry per MowDeck account, one device per mower).
 - Requires Home Assistant 2026.10.0 or newer (`hacs.json`).
-- [Integration quality scale](https://developers.home-assistant.io/docs/core/integration-quality-scale/): Silver (`custom_components/mowdeck/quality_scale.yaml`; tests keep the coverage above 95 %).
+- [Integration quality scale](https://developers.home-assistant.io/docs/core/integration-quality-scale/): Gold (`custom_components/mowdeck/quality_scale.yaml`; tests keep the coverage above 95 %).
 - Licence: AGPL-3.0-only, like the rest of MowDeck.
 - Releases: semantic versions on the 0.x line, SSH-signed tags, `mowdeck.zip` with Sigstore signatures and build provenance (see `SECURITY.md`).
 
@@ -51,6 +51,31 @@ The flow exchanges the token, reads `/api/v1/identity/me` and lists the mowers; 
 **Options** (Configure on the entry): the poll interval while the live connection is down (default 60 s, 15 to 3600), whether to show the emergency stop button (default on), and **persistent notifications**: show MowDeck notifications of at least this severity also as persistent notifications in Home Assistant (off, critical only, warnings and critical, all; default off).
 
 **Reconfigure** (three dots on the entry): a new URL when MowDeck moved, optionally with a new API token. Leave the token empty to keep the current one; a token of another MowDeck account is refused.
+
+## Supported devices
+
+The integration talks to MowDeck, not to the mowers: it supports every mower a MowDeck installation runs, with the entities that mower's capabilities allow (patterns, cameras, light, manual driving, reverse, firmware updates, settings, maintenance commands and so on are created only where the mower's connection reports them).
+
+| Device | Through MowDeck | Status |
+| --- | --- | --- |
+| Mammotion LUBA 2 family (LUBA 2 AWD, LUBA 2 AWD X, also with 4G and RTK) | MowDeck's Mammotion adapter: the Mammotion cloud, optionally a Bluetooth bridge (an ESPHome Bluetooth proxy) for manual driving, spot mowing and the nudges | in daily use with a LUBA 2 AWD X 4G RTK |
+| Mammotion LUBA mini, YUKA | the same adapter | supported by MowDeck; the entities follow what the adapter reports, not verified with Home Assistant |
+| Mammotion RTK base station (LUBA 2 family) | as its own device, through a linked mower (MowDeck 0.11) | see [RTK base stations](#rtk-base-stations) |
+| MowDeck simulator | the simulator connection | for trying MowDeck and Home Assistant without hardware |
+
+What the integration needs from MowDeck:
+
+- A reachable MowDeck installation (self-hosted, see [lukislp/mowdeck](https://github.com/lukislp/mowdeck)) and an API token of its account. Mowers MowDeck has no adapter for cannot be added.
+- Features follow the MowDeck version: notifications need 0.7, the camera still image and the blade change reminder 0.8, the mower settings, maintenance commands and RTK base stations 0.11. With an older MowDeck those entities are simply missing; the rest works.
+
+## Use cases
+
+- **Keep the lawn dry**: send the mower home when its own rain sensor reports rain or MowDeck's rain pause holds, and leave the restart to the schedules (MowDeck skips runs while the lawn is wet).
+- **Know when something goes wrong**: get a phone notification when the mower is stuck, lifted, leaves its dock unexpectedly or leaves the geofence, with a link to the mower in MowDeck.
+- **Free a stuck mower from the sofa**: start an AI analysis, see the photo and the proposal on the phone, approve it in MowDeck with one tap; or nudge the mower a little with the emergency nudges.
+- **Mow around people**: pause or skip a run when the family is in the garden (a person, a door sensor or a calendar), resume afterwards.
+- **See the garden**: the map with the planned path, coverage and signal heatmaps and the missed area on a dashboard; the mowing calendar next to the family calendar.
+- **Look after the mower**: blade hours with a reminder, firmware updates for the mower and the RTK base station, the base station's link and whether it was moved.
 
 ## Data updates
 
@@ -298,6 +323,121 @@ target:
 data:
   layer: coverage
 response_variable: heatmap
+```
+
+## Examples
+
+Replace `luba` with the name of the mower and `notify.mobile_app_phone` with your phone's notify action (Home Assistant Companion app). The MowDeck links in notifications open the web app, where proposals are approved and the mower can be driven.
+
+**Rain: send the mower home.** `lawn_mower.dock` pauses the job and returns to the dock; **Start mowing** later resumes it. `binary_sensor.luba_rain` is the mower's own rain sensor (only while the mower's **Rain detection** is on); `binary_sensor.luba_rain_hold` is MowDeck's rain pause from the forecast and recent rain.
+
+```yaml
+alias: "Luba: home when it rains"
+mode: single
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.luba_rain
+    to: "on"
+  - trigger: state
+    entity_id: binary_sensor.luba_rain_hold
+    to: "on"
+conditions:
+  - condition: state
+    entity_id: lawn_mower.luba
+    state: mowing
+actions:
+  - action: lawn_mower.dock
+    target:
+      entity_id: lawn_mower.luba
+```
+
+**Alarms on the phone.** The bus event `mowdeck_notification` carries every MowDeck notification of the account; `url` is the path in the web app.
+
+```yaml
+alias: "MowDeck: critical alarms to the phone"
+mode: queued
+triggers:
+  - trigger: event
+    event_type: mowdeck_notification
+    event_data:
+      severity: critical
+actions:
+  - action: notify.mobile_app_phone
+    data:
+      title: "{{ trigger.event.data.title }}"
+      message: "{{ trigger.event.data.body }}"
+      data:
+        # iOS opens url, Android clickAction.
+        url: "https://mowdeck.example.ts.net{{ trigger.event.data.url or '/' }}"
+        clickAction: "https://mowdeck.example.ts.net{{ trigger.event.data.url or '/' }}"
+        push:
+          interruption-level: time-sensitive
+```
+
+The same per mower with the event entity, for a few kinds only:
+
+```yaml
+alias: "Luba: stuck or lifted"
+triggers:
+  - trigger: state
+    entity_id: event.luba_notification
+    not_to: unavailable
+conditions:
+  - condition: state
+    entity_id: event.luba_notification
+    attribute: event_type
+    state:
+      - mower_stuck
+      - mower_lifted
+      - mower_left_dock_unexpectedly
+      - geofence_exit
+actions:
+  - action: notify.mobile_app_phone
+    data:
+      title: "{{ state_attr('event.luba_notification', 'title') }}"
+      message: "{{ state_attr('event.luba_notification', 'body') }}"
+```
+
+**A Vision proposal on the phone, with a button that opens it in MowDeck.** The event `mowdeck_vision_proposal` fires for every proposal change; `link` is the proposal's page in MowDeck (absolute), where it is approved.
+
+```yaml
+alias: "Luba: AI recovery proposal"
+mode: single
+triggers:
+  - trigger: event
+    event_type: mowdeck_vision_proposal
+    event_data:
+      state: proposed
+actions:
+  - action: notify.mobile_app_phone
+    data:
+      title: "Luba is stuck: proposal waiting"
+      message: >-
+        {{ state_attr('sensor.luba_ai_recovery', 'situation') }}:
+        {{ state_attr('sensor.luba_ai_recovery', 'action') }}
+      data:
+        image: /api/image_proxy/image.luba_ai_recovery_image
+        url: "{{ trigger.event.data.link }}"
+        clickAction: "{{ trigger.event.data.link }}"
+        actions:
+          - action: URI
+            title: Open in MowDeck
+            uri: "{{ trigger.event.data.link }}"
+```
+
+**Skip the next run while people are in the garden.** Pressing **Skip next run of Morning** keeps the schedule; the run after it fires as usual.
+
+```yaml
+alias: "Garden party: skip the next mowing"
+triggers:
+  - trigger: state
+    entity_id: calendar.family
+    attribute: message
+    to: Garden party
+actions:
+  - action: button.press
+    target:
+      entity_id: button.luba_skip_next_run_of_morning
 ```
 
 ## Spot mowing
