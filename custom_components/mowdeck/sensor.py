@@ -28,6 +28,11 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .base_station import (
+    BaseStationCoordinator,
+    BaseStationEntity,
+    async_add_base_station_entities,
+)
 from .const import (
     ERROR_CATEGORIES,
     GNSS_SOLUTIONS,
@@ -547,6 +552,13 @@ async def async_setup_entry(
         fingerprint=lambda m: scheduler.data.available,
         listen=[scheduler],
     )
+    async_add_base_station_entities(
+        entry,
+        async_add_entities,
+        lambda base_stations, station_id: [
+            BaseStationSensor(base_stations, station_id, d) for d in BASE_STATION_SENSORS
+        ],
+    )
 
 
 class MowDeckSensor(MowDeckEntity, SensorEntity):
@@ -844,3 +856,98 @@ class MissedAreaSensor(MowDeckEntity, SensorEntity):
             "from": layer.get("from"),
             "to": layer.get("to"),
         }
+
+
+# RTK base stations (base_station.py): MowerState.base_station of a linked mower. "unknown"
+# (RtkCorrectionLink, GnssSolution) becomes the unknown state.
+CORRECTION_LINKS = ["lora", "internet", "network"]
+
+
+@dataclass(frozen=True, kw_only=True)
+class BaseStationSensorDescription(SensorEntityDescription):
+    """A sensor of a base station and how to read it from its live state."""
+
+    value_fn: Callable[[dict[str, Any]], Any]
+
+
+def _base_enum(key: str, options: list[str]) -> Callable[[dict[str, Any]], str | None]:
+    def value(base: dict[str, Any]) -> str | None:
+        found = base.get(key)
+        return found if found in options else None
+
+    return value
+
+
+def _base_int(key: str) -> Callable[[dict[str, Any]], int | None]:
+    def value(base: dict[str, Any]) -> int | None:
+        found = base.get(key)
+        return found if isinstance(found, int) and not isinstance(found, bool) else None
+
+    return value
+
+
+BASE_STATION_SENSORS: tuple[BaseStationSensorDescription, ...] = (
+    BaseStationSensorDescription(
+        key="correction_link",
+        translation_key="base_correction_link",
+        device_class=SensorDeviceClass.ENUM,
+        options=CORRECTION_LINKS,
+        value_fn=_base_enum("correction_link", CORRECTION_LINKS),
+    ),
+    BaseStationSensorDescription(
+        key="rtk_status",
+        translation_key="rtk_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=GNSS_SOLUTIONS,
+        value_fn=_base_enum("rtk_status", GNSS_SOLUTIONS),
+    ),
+    BaseStationSensorDescription(
+        key="satellites",
+        translation_key="gnss_satellites",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=_base_int("satellites"),
+    ),
+    BaseStationSensorDescription(
+        key="lora_channel",
+        translation_key="base_lora_channel",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=_base_int("lora_channel"),
+    ),
+    BaseStationSensorDescription(
+        key="wifi_signal",
+        translation_key="wifi_signal",
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+        native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=_base_int("wifi_dbm"),
+    ),
+)
+
+
+class BaseStationSensor(BaseStationEntity, SensorEntity):
+    """A value of a base station's live state; unknown while no linked mower reports it."""
+
+    entity_description: BaseStationSensorDescription
+
+    def __init__(
+        self,
+        base_stations: BaseStationCoordinator,
+        station_id: str,
+        description: BaseStationSensorDescription,
+    ) -> None:
+        """Create the sensor from its description."""
+        super().__init__(base_stations, station_id, description.key, description.translation_key)
+        self.entity_description = description
+
+    @property
+    def native_value(self) -> Any:
+        """The value from the live state."""
+        return self.entity_description.value_fn(self.base_state)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """When the details (satellites, RTK status, Wi-Fi) were last reported."""
+        if self.entity_description.key not in ("rtk_status", "satellites", "wifi_signal"):
+            return None
+        return {"details_at": self.base_state.get("details_at")}

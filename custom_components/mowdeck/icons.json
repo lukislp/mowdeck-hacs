@@ -35,7 +35,9 @@
       "online_time_today": { "default": "mdi:access-point" },
       "ai_recovery": { "default": "mdi:robot-outline" },
       "spot_run": { "default": "mdi:target" },
-      "missed_area": { "default": "mdi:texture-box" }
+      "missed_area": { "default": "mdi:texture-box" },
+      "base_correction_link": { "default": "mdi:radio-tower" },
+      "base_lora_channel": { "default": "mdi:radio" }
     },
     "button": {
       "emergency_stop": { "default": "mdi:alert-octagon" },

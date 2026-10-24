@@ -109,4 +109,10 @@ async def async_get_config_entry_diagnostics(
             "received": runtime.notifications.received,
             "delivered": runtime.notifications.delivered_count,
         },
+        "base_stations": {
+            "last_update_success": runtime.base_stations.last_update_success,
+            "available": runtime.base_stations.data.available,
+            "stations": async_redact_data(runtime.base_stations.data.stations, TO_REDACT),
+            "checked": sorted(runtime.base_stations.data.checked),
+        },
     }

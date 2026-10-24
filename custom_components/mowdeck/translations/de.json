@@ -112,6 +112,12 @@
             "name": "Quellenangabe"
           }
         }
+      },
+      "base_link": {
+        "name": "Verbindung zum Mäher"
+      },
+      "base_moved": {
+        "name": "Versetzt"
       }
     },
     "button": {
@@ -656,6 +662,17 @@
             "name": "Bis"
           }
         }
+      },
+      "base_correction_link": {
+        "name": "RTK-Korrekturweg",
+        "state": {
+          "lora": "LoRa-Funk",
+          "internet": "Internet",
+          "network": "Netzwerk-RTK"
+        }
+      },
+      "base_lora_channel": {
+        "name": "LoRa-Kanal"
       }
     },
     "switch": {
