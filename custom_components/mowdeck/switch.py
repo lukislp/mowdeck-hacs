@@ -1,6 +1,6 @@
-"""Switches of a MowDeck mower: its camera light (headlamp), for mowers that have one, and
-one per schedule that mows it (enabled or not) and one per map area (part of the next start
-or not)."""
+"""Switches of a MowDeck mower: its camera light (headlamp), for mowers that have one, one
+per schedule that mows it (enabled or not), one per map area (part of the next start or not)
+and one per on/off setting the mower declares (``settings.py``)."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import CAN_CONTROL, CAN_EDIT_SCHEDULE
 from .entity import MowDeckEntity, ScheduleEntity, async_add_mower_entities
+from .settings import SettingEntity, setting_entities
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -46,6 +47,14 @@ async def async_setup_entry(
         lambda coordinator, m: [
             AreaSwitch(coordinator, m, str(area["id"])) for area in coordinator.areas(m)
         ],
+        domain=Platform.SWITCH,
+    )
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, m: setting_entities(
+            coordinator, m, "bool", lambda c, mower, key: [SettingSwitch(c, mower, key)]
+        ),
         domain=Platform.SWITCH,
     )
     scheduler = entry.runtime_data.scheduler
@@ -185,3 +194,23 @@ class AreaSwitch(MowDeckEntity, SwitchEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Take the area out of the next start."""
         self.coordinator.async_toggle_area(self.mower_id, self.area_id, False)
+
+
+class SettingSwitch(SettingEntity, SwitchEntity):
+    """An on/off setting of the mower (``set_setting`` with true or false)."""
+
+    setting_type = "bool"
+
+    @property
+    def is_on(self) -> bool | None:
+        """The reported value; unknown while the mower has not reported it."""
+        value = self.setting_value
+        return value if isinstance(value, bool) else None
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Switch the setting on."""
+        await self.async_set_setting(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Switch the setting off."""
+        await self.async_set_setting(False)

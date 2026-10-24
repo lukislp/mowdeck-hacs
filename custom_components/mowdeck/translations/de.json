@@ -76,6 +76,9 @@
       "error": {
         "name": "Fehler"
       },
+      "rain_detected": {
+        "name": "Regen"
+      },
       "rain_hold": {
         "name": "Regenpause",
         "state_attributes": {
@@ -120,6 +123,12 @@
     "button": {
       "emergency_stop": {
         "name": "Not-Aus"
+      },
+      "setting_non_work_hours_clear": {
+        "name": "Ruhezeit ausschalten"
+      },
+      "setting_other_clear": {
+        "name": "Einstellung {setting} ausschalten"
       },
       "return_to_dock": {
         "name": "Zur Station"
@@ -202,6 +211,18 @@
             "name": "Für diesen Mäher gesetzt"
           }
         }
+      },
+      "setting_voice_volume": {
+        "name": "Lautstärke der Ansagen"
+      },
+      "setting_recharge_level": {
+        "name": "Zum Laden zurück bei"
+      },
+      "setting_resume_level": {
+        "name": "Weitermähen ab"
+      },
+      "setting_other": {
+        "name": "Einstellung {setting}"
       }
     },
     "select": {
@@ -221,6 +242,38 @@
           "edge_only": "Nur Rand",
           "random_angle": "Zufälliger Winkel"
         }
+      },
+      "setting_turn_style": {
+        "name": "Wendeart",
+        "state": {
+          "in_place": "Auf der Stelle wenden",
+          "multi_point": "Mehrpunktwende"
+        }
+      },
+      "setting_traversal_mode": {
+        "name": "Weg zwischen Bereichen",
+        "state": {
+          "direct": "Direkt",
+          "follow_perimeter": "Am Rand entlang"
+        }
+      },
+      "setting_wildlife_safety": {
+        "name": "Tierschutz",
+        "state": {
+          "off": "Aus",
+          "stop_mowing": "Mähen anhalten",
+          "low_speed_mowing": "Langsam mähen"
+        }
+      },
+      "setting_voice_gender": {
+        "name": "Stimme",
+        "state": {
+          "man": "Männlich",
+          "woman": "Weiblich"
+        }
+      },
+      "setting_other": {
+        "name": "Einstellung {setting}"
       }
     },
     "sensor": {
@@ -604,6 +657,41 @@
       },
       "area": {
         "name": "{area} mähen"
+      },
+      "setting_rain_detection": {
+        "name": "Regenerkennung"
+      },
+      "setting_side_led": {
+        "name": "Seitenlichter"
+      },
+      "setting_night_light": {
+        "name": "Nachtlicht"
+      },
+      "setting_voice_enabled": {
+        "name": "Sprachansagen"
+      },
+      "setting_smart_recharge_level": {
+        "name": "Intelligente Rückkehrschwelle"
+      },
+      "setting_smart_resume_level": {
+        "name": "Intelligente Fortsetzungsschwelle"
+      },
+      "setting_other": {
+        "name": "Einstellung {setting}"
+      }
+    },
+    "time": {
+      "setting_non_work_hours_start": {
+        "name": "Ruhezeit Beginn"
+      },
+      "setting_non_work_hours_end": {
+        "name": "Ruhezeit Ende"
+      },
+      "setting_other_start": {
+        "name": "Einstellung {setting} Beginn"
+      },
+      "setting_other_end": {
+        "name": "Einstellung {setting} Ende"
       }
     },
     "update": {
@@ -853,6 +941,9 @@
     "command_forbidden": {
       "message": "Das API-Token darf {command} nicht senden. Gib dem Token in der MowDeck-App die Berechtigung {permission}."
     },
+    "command_refused": {
+      "message": "Der Mäher hat {command} abgelehnt ({status}): {reason}"
+    },
     "camera_relay_unsupported": {
       "message": "Das Kamera-Relay von MowDeck kann diesen Mäher nicht bedienen. Aktiviere in MowDeck das Kamera-Relay (und für Mammotion-Mäher die Agora-Bridge)"
     },
@@ -930,6 +1021,9 @@
     },
     "spot_no_route": {
       "message": "MowDeck findet keinen Weg zum Punkt: {reason}"
+    },
+    "time_window_empty": {
+      "message": "Beginn und Ende des Zeitfensters sind beide {time}. Wähle einen anderen Beginn oder ein anderes Ende, oder schalte das Zeitfenster mit seiner Taste aus."
     }
   },
   "issues": {
