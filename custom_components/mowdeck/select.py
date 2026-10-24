@@ -1,5 +1,7 @@
-"""Selects of a MowDeck mower: which map areas "start mowing" mows, the mowing pattern of the
-mower's mowing defaults, and one per option setting the mower declares (``settings.py``).
+"""Selects of a MowDeck mower: which map areas "start mowing" mows, the mowing pattern,
+obstacle detection and path order of the mower's mowing defaults (the latter two where the
+mower declares them in ``start_options``), and one per option setting the mower declares
+(``settings.py``).
 
 The area select is the shortcut (all areas or one); the area switches (``switch.py``) make the
 multi-area selection, which the select then shows as ``selection``. Both edit the same
@@ -16,9 +18,10 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
 
-from .const import ALL_AREAS, CAN_CONTROL, PATTERNS, SEVERAL_AREAS
+from .const import ALL_AREAS, CAN_CONTROL, SEVERAL_AREAS
 from .entity import MowDeckEntity, async_add_mower_entities
 from .settings import SettingEntity, setting_entities
+from .start_options import OBSTACLE_DETECTION, PATH_ORDERS, native_patterns, offered_options
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -27,12 +30,6 @@ if TYPE_CHECKING:
     from .coordinator import MowDeckCoordinator
 
 PARALLEL_UPDATES = 1
-
-
-def native_patterns(caps: dict[str, Any]) -> list[str]:
-    """The mower's native patterns that MowDeck's mowing defaults know, in MowDeck's order."""
-    offered = {str(p) for p in caps.get("native_patterns") or []}
-    return [pattern for pattern in PATTERNS if pattern in offered]
 
 
 async def async_setup_entry(
@@ -46,8 +43,15 @@ async def async_setup_entry(
     def entities(coordinator: MowDeckCoordinator, mower_id: str) -> list[SelectEntity]:
         selects: list[SelectEntity] = [AreaSelect(coordinator, mower_id)]
         caps = coordinator.data.capabilities.get(mower_id) or {}
-        if native_patterns(caps) and coordinator.permitted(mower_id, CAN_CONTROL):
+        if not coordinator.permitted(mower_id, CAN_CONTROL):
+            return selects
+        if native_patterns(caps):
             selects.append(PatternSelect(coordinator, mower_id))
+        selects += [
+            JobOptionSelect(coordinator, mower_id, description)
+            for description in JOB_OPTION_SELECTS
+            if offered_options(caps, description.declared, description.known)
+        ]
         return selects
 
     async_add_mower_entities(entry, async_add_entities, entities)
@@ -162,6 +166,65 @@ class PatternSelect(MowDeckEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Save the pattern into the mowing defaults."""
         await async_save_mow_defaults(self, {"name": option})
+
+
+@dataclass(frozen=True, kw_only=True)
+class JobOptionDescription(SelectEntityDescription):
+    """A job option of the mowing defaults: its key in ``MowPattern``, the list in
+    ``start_options`` that declares its values and the values MowDeck knows."""
+
+    field: str
+    declared: str
+    known: list[str]
+
+
+JOB_OPTION_SELECTS: tuple[JobOptionDescription, ...] = (
+    JobOptionDescription(
+        key="mow_obstacle_detection",
+        field="obstacle_detection",
+        declared="obstacle_detection",
+        known=OBSTACLE_DETECTION,
+        entity_category=EntityCategory.CONFIG,
+    ),
+    JobOptionDescription(
+        key="mow_order",
+        field="order",
+        declared="orders",
+        known=PATH_ORDERS,
+        entity_category=EntityCategory.CONFIG,
+    ),
+)
+
+
+class JobOptionSelect(MowDeckEntity, SelectEntity):
+    """Obstacle detection or path order of the mower's mowing defaults (``mower.control``),
+    with the values the mower declares in ``start_options``; unknown while the mower's own
+    default applies. Kept, unavailable, while the mower no longer declares the option."""
+
+    entity_description: JobOptionDescription
+
+    def __init__(
+        self, coordinator: MowDeckCoordinator, mower_id: str, description: JobOptionDescription
+    ) -> None:
+        """Create the select from its description."""
+        super().__init__(coordinator, mower_id, description.key)
+        self.entity_description = description
+
+    @property
+    def options(self) -> list[str]:
+        """The values the mower declares."""
+        description = self.entity_description
+        return offered_options(self.capabilities, description.declared, description.known)
+
+    @property
+    def current_option(self) -> str | None:
+        """The saved value."""
+        value = self.coordinator.mow_pattern(self.mower_id).get(self.entity_description.field)
+        return value if value in self.options else None
+
+    async def async_select_option(self, option: str) -> None:
+        """Save the value into the mowing defaults."""
+        await async_save_mow_defaults(self, {self.entity_description.field: option})
 
 
 async def async_save_mow_defaults(entity: MowDeckEntity, change: dict[str, Any]) -> None:

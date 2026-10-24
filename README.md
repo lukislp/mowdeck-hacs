@@ -187,6 +187,7 @@ Per mower one device (manufacturer Mammotion, model from the capabilities, firmw
 | Area | `select.luba_area` | `all`, one map area, or `selection` (several areas chosen with the area switches); areas named as in MowDeck (the name given in MowDeck, else the mower's own name, else "Area N" / "Bereich N" in map order); restored after a restart |
 | Mow *area* | `switch.luba_mow_front`, ... | one per map area: whether "start mowing" mows it. The switches are the multi-area selection, the Area select its shortcut; both always agree |
 | Mowing pattern, Mowing angle, Border laps, Path spacing | `select.luba_mowing_pattern`, `number.luba_mowing_angle`, `number.luba_border_laps`, `number.luba_path_spacing` | the mower's mowing defaults in MowDeck (`MowerOut.mow_defaults`, `PUT /fleet/mowers/{id}/mow-defaults`), shared with the web app and schedules: the pattern among the mower's `native_patterns`, angle 0 to 180°, border laps 0 to 4, path spacing in cm within `path_spacing_range_mm` (only where the model has one; unknown while the mower's own spacing applies). Need `mower.control` |
+| Obstacle detection, Path order, Laps around no-go zones | `select.luba_obstacle_detection`, `select.luba_path_order`, `number.luba_laps_around_no_go_zones` | the job options of the mowing defaults (same `mow-defaults` call): only the modes, orders and lap range the mower declares in `capabilities.start_options` (MowDeck 0.18; LUBA 2 AWD and AWD X), unknown while the mower's own setting applies. Created only where the mower declares them; kept but unavailable while it no longer does. Need `mower.control`. The start progress is no default; it exists only in `mowdeck.start_mow` |
 | Mowing time today, Distance today, Jobs today, Online time today | `sensor.luba_mowing_time_today`, ... | totals of the current **UTC** day (`/telemetry/mowers/{id}/health/daily`, MowDeck counts days in UTC), every 15 minutes; online time is diagnostic and disabled by default |
 | Position | `device_tracker.luba_position` | GPS (`position` of the state), attributes `heading` (degrees, one decimal) and `position_source` (`rtk`, `gnss` or `dock`) |
 | RTK base station | `sensor.garden_base_rtk_correction_link`, `binary_sensor.garden_base_mower_link`, `update.garden_base_firmware`, ... | a device of its own per RTK base station (see [RTK base stations](#rtk-base-stations)) |
@@ -340,7 +341,8 @@ Targets are MowDeck lawn mower entities.
 
 | Action | Fields | API command |
 | --- | --- | --- |
-| `mowdeck.start_mow` | `area_ids` (list, optional; default: the selection), `pattern` (object, optional) | `start_mow` |
+| `mowdeck.start_mow` | `areas`, `pattern`, `angle_deg`, `border_laps`, `spacing_cm`, `blade_height_mm`, `speed_mps`, `obstacle_detection`, `obstacle_laps`, `order`, `start_progress_pct`, `ignore_unsupported` (all optional; see [Starting with parameters](#starting-with-parameters)); `area_ids` and a `pattern` object still work | `set_blade_height` and `set_speed` when given, then `start_mow`; optional response |
+| `mowdeck.get_start_options` | | answers what `start_mow` accepts on each mower; response only |
 | `mowdeck.emergency_stop` | | `emergency_stop` |
 | `mowdeck.set_blade_height` | `mm` (10 to 120) | `set_blade_height` |
 | `mowdeck.set_speed` | `mps` (up to 2, sent with two decimals) | `set_speed` |
@@ -349,21 +351,105 @@ Targets are MowDeck lawn mower entities.
 | `mowdeck.get_heatmap` | `layer` (`coverage`, `rtk`, `wifi`, `mnet`), `start`, `end` (default the last 7 days), `cell` (0.5, 1 or 2 m) | answers the heatmap layer (`GET /telemetry/mowers/{id}/heatmap`); response only |
 
 ```yaml
-action: mowdeck.start_mow
-target:
-  entity_id: lawn_mower.luba
-data:
-  area_ids: ["zone-front", "zone-back"]
-  pattern: {name: stripes, angle_deg: 45}
-```
-
-```yaml
 action: mowdeck.get_heatmap
 target:
   entity_id: lawn_mower.luba
 data:
   layer: coverage
 response_variable: heatmap
+```
+
+### Starting with parameters
+
+`mowdeck.start_mow` starts a job with the settings of the call, like the start sheet of MowDeck's web app. Every field is optional:
+
+| Field | Values | Goes to |
+| --- | --- | --- |
+| `areas` | area switches (`switch.luba_mow_front`), area names as Home Assistant shows them (`Front`, any case) or area ids; default: the areas selected with the area switches | `StartMow.area_ids`, in the given order |
+| `pattern` | `stripes`, `diagonal`, `checkerboard`, `edge_only`, `random_angle`: those in the mower's `native_patterns` | `pattern.name` |
+| `angle_deg` | 0 to 180 | `pattern.angle_deg` |
+| `border_laps` | 0 to 4 | `pattern.border_laps` |
+| `spacing_cm` | within the model's `path_spacing_range_mm` | `pattern.spacing_m` |
+| `blade_height_mm` | within `blade_height_range_mm` | a `set_blade_height` command before the start |
+| `speed_mps` | within the model's speed range (sent with two decimals) | a `set_speed` command before the start |
+| `obstacle_detection` | `off`, `slow_touch`, `less_touch`, `standard`, `sensitive`: those in `start_options.obstacle_detection` | `pattern.obstacle_detection` |
+| `obstacle_laps` | within `start_options.obstacle_laps_range` | `pattern.obstacle_laps` |
+| `order` | `border_first`, `grid_first`: those in `start_options.orders` | `pattern.order` |
+| `start_progress_pct` | within `start_options.start_progress_range_pct` (0 is the beginning and is not sent) | `pattern.start_progress_pct` |
+| `ignore_unsupported` | `true`: leave out what a mower does not support instead of failing | |
+
+**Per mower.** The fields are checked against the capabilities of each targeted mower when the action runs, before anything is sent to it. A field the mower does not offer, or a value outside its options or range, fails the action for that mower with a message that names the mower, the field and what the mower allows, for example "blade_height_mm 80 does not fit Luba. Allowed: 25 - 70". With several mowers each one checks for itself (a mower whose fields fit still starts), and with `areas` each takes its own areas: area switches of the other mowers are skipped, names are looked up on each mower's map. With `ignore_unsupported: true` a mower leaves out what does not fit and starts with the rest; the response lists what it left out under `ignored`.
+
+**Order.** `set_blade_height`, then `set_speed`, then `start_mow`; each command is sent once MowDeck has accepted the one before (the mower's connection uses the last blade height and speed it was sent for the job). Blade height and speed stay set after the job, like the number entities.
+
+**Defaults.** Fields left out come from the mower's mowing defaults (the Mowing pattern, Mowing angle, Border laps, Path spacing, Obstacle detection, Path order and Laps around no-go zones entities): the integration sends the saved defaults with the given fields on top. MowDeck's Fleet start does not fill in the defaults itself (only MowDeck's schedules do), so this happens in the integration. Without saved defaults and without pattern fields no pattern is sent and the mower's own settings apply; a saved job option the mower no longer declares is left out (listed under `ignored` with `source: defaults`).
+
+**The action form.** It shows every field with the values some MowDeck mower can take: Home Assistant's field filters only work with Home Assistant's own feature flags and attributes, so the form cannot hide fields per mower. `mowdeck.get_start_options` tells what a mower takes.
+
+**Permissions.** The start, the blade height and the speed need `mower.control`. The defaults entities (`PUT /fleet/mowers/{id}/mow-defaults`) need `mower.control` too: MowDeck checks `can_control` there, not `fleet.manage`.
+
+Mow the front garden at 25 mm with sensitive obstacle detection, border first:
+
+```yaml
+action: mowdeck.start_mow
+target:
+  entity_id: lawn_mower.luba
+data:
+  areas: [switch.luba_mow_front]
+  blade_height_mm: 25
+  obstacle_detection: sensitive
+  order: border_first
+response_variable: started
+```
+
+The response, per mower:
+
+```yaml
+lawn_mower.luba:
+  mower_id: 9a5c2d6e-...
+  command_id: 3f0c...  # the start_mow command
+  area_ids: [zone-front]
+  pattern: {name: stripes, angle_deg: 0.0, border_laps: 1, obstacle_detection: sensitive, order: border_first}
+  commands:
+    - {kind: set_blade_height, command_id: 1d2e...}
+    - {kind: start_mow, command_id: 3f0c...}
+  ignored: []
+```
+
+Two mowers, diagonal stripes at 30° where a mower runs them, from the middle of the route where a mower can:
+
+```yaml
+action: mowdeck.start_mow
+target:
+  entity_id: [lawn_mower.luba, lawn_mower.yuka]
+data:
+  areas: [Front]
+  pattern: diagonal
+  angle_deg: 30
+  start_progress_pct: 50
+  ignore_unsupported: true
+```
+
+The older form still works: `area_ids` (map area ids) and `pattern` as a whole object, for example `pattern: {name: stripes, angle_deg: 45}`; fields given next to the object go on top of it.
+
+**What a mower takes.** `mowdeck.get_start_options` answers per mower: `model`, `parameters` (each field the mower takes, with `options`, or `min`, `max` and `step`), `unsupported` (the fields it does not take), `areas` (`id` and `name`), `defaults` (`saved` and the saved `pattern`) and `current` (`blade_height_mm`, `speed_mps`). A script can pick what the mower offers, for example its most careful obstacle detection:
+
+```yaml
+sequence:
+  - action: mowdeck.get_start_options
+    target: {entity_id: lawn_mower.luba}
+    response_variable: options
+  - variables:
+      offered: "{{ options['lawn_mower.luba'].parameters }}"
+  - if: "{{ 'obstacle_detection' in offered }}"
+    then:
+      - action: mowdeck.start_mow
+        target: {entity_id: lawn_mower.luba}
+        data:
+          obstacle_detection: "{{ offered.obstacle_detection.options | last }}"
+    else:
+      - action: mowdeck.start_mow
+        target: {entity_id: lawn_mower.luba}
 ```
 
 ## Examples

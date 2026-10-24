@@ -4,17 +4,142 @@ start_mow:
       integration: mowdeck
       domain: lawn_mower
   fields:
+    areas:
+      required: false
+      example: '["switch.luba_mow_front"]'
+      selector:
+        entity:
+          multiple: true
+          filter:
+            integration: mowdeck
+            domain: switch
     area_ids:
       required: false
       example: '["zone-front", "zone-back"]'
       selector:
         text:
           multiple: true
-    pattern:
+    pattern_settings:
+      collapsed: true
+      fields:
+        pattern:
+          required: false
+          example: stripes
+          selector:
+            select:
+              translation_key: mow_pattern
+              options:
+                - stripes
+                - diagonal
+                - checkerboard
+                - edge_only
+                - random_angle
+        angle_deg:
+          required: false
+          example: 45
+          selector:
+            number:
+              min: 0
+              max: 180
+              step: 1
+              unit_of_measurement: "°"
+              mode: box
+        border_laps:
+          required: false
+          example: 1
+          selector:
+            number:
+              min: 0
+              max: 4
+              step: 1
+              mode: box
+        spacing_cm:
+          required: false
+          example: 25
+          selector:
+            number:
+              min: 5
+              max: 200
+              step: 1
+              unit_of_measurement: cm
+              mode: box
+    cutting:
+      collapsed: true
+      fields:
+        blade_height_mm:
+          required: false
+          example: 25
+          selector:
+            number:
+              min: 10
+              max: 120
+              step: 1
+              unit_of_measurement: mm
+              mode: slider
+        speed_mps:
+          required: false
+          example: 0.4
+          selector:
+            number:
+              min: 0.01
+              max: 2
+              step: 0.01
+              unit_of_measurement: m/s
+              mode: slider
+    job_options:
+      collapsed: true
+      fields:
+        obstacle_detection:
+          required: false
+          example: sensitive
+          selector:
+            select:
+              translation_key: obstacle_detection
+              options:
+                - "off"
+                - slow_touch
+                - less_touch
+                - standard
+                - sensitive
+        obstacle_laps:
+          required: false
+          example: 1
+          selector:
+            number:
+              min: 0
+              max: 4
+              step: 1
+              mode: box
+        order:
+          required: false
+          example: border_first
+          selector:
+            select:
+              translation_key: path_order
+              options:
+                - border_first
+                - grid_first
+        start_progress_pct:
+          required: false
+          example: 50
+          selector:
+            number:
+              min: 0
+              max: 99
+              step: 1
+              unit_of_measurement: "%"
+              mode: slider
+    ignore_unsupported:
       required: false
-      example: '{"name": "stripes", "angle_deg": 45}'
+      default: false
       selector:
-        object:
+        boolean:
+
+get_start_options:
+  target:
+    entity:
+      integration: mowdeck
+      domain: lawn_mower
 
 emergency_stop:
   target:
