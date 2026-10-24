@@ -15,6 +15,11 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.const import EntityCategory, Platform
 from homeassistant.core import HomeAssistant
 
+from .base_station import (
+    BaseStationCoordinator,
+    BaseStationEntity,
+    async_add_base_station_entities,
+)
 from .const import RAIN_VERDICTS
 from .entity import MowDeckEntity, async_add_mower_entities
 
@@ -99,6 +104,56 @@ async def async_setup_entry(
         fingerprint=lambda m: scheduler.data.available,
         listen=[scheduler],
     )
+    async_add_base_station_entities(
+        entry,
+        async_add_entities,
+        lambda base_stations, station_id: [
+            BaseStationBinarySensor(base_stations, station_id, d)
+            for d in BASE_STATION_BINARY_SENSORS
+        ],
+    )
+
+
+@dataclass(frozen=True, kw_only=True)
+class BaseStationBinarySensorDescription(BinarySensorEntityDescription):
+    """A flag of a base station's live state (``MowerState.base_station``)."""
+
+    field: str
+
+
+BASE_STATION_BINARY_SENSORS: tuple[BaseStationBinarySensorDescription, ...] = (
+    # The mower receives the base station (over LoRa the radio link); unknown while the
+    # mower does not say, which includes network RTK.
+    BaseStationBinarySensorDescription(
+        key="link", device_class=BinarySensorDeviceClass.CONNECTIVITY, field="link_up"
+    ),
+    # Moved since the map was recorded: positions may be shifted.
+    BaseStationBinarySensorDescription(
+        key="moved", device_class=BinarySensorDeviceClass.PROBLEM, field="moved"
+    ),
+)
+
+
+class BaseStationBinarySensor(BaseStationEntity, BinarySensorEntity):
+    """A flag of a base station; unknown while no linked mower reports it."""
+
+    entity_description: BaseStationBinarySensorDescription
+
+    def __init__(
+        self,
+        base_stations: BaseStationCoordinator,
+        station_id: str,
+        description: BaseStationBinarySensorDescription,
+    ) -> None:
+        """Create the binary sensor from its description."""
+        super().__init__(base_stations, station_id, description.key, f"base_{description.key}")
+        self.entity_description = description
+
+    @property
+    def is_on(self) -> bool | None:
+        """The reported flag."""
+        value = self.base_state.get(self.entity_description.field)
+        return value if isinstance(value, bool) else None
 
 
 class MowDeckBinarySensor(MowDeckEntity, BinarySensorEntity):

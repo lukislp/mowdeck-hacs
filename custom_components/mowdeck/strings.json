@@ -112,6 +112,12 @@
             "name": "Attribution"
           }
         }
+      },
+      "base_link": {
+        "name": "Mower link"
+      },
+      "base_moved": {
+        "name": "Moved"
       }
     },
     "button": {
@@ -656,6 +662,17 @@
             "name": "To"
           }
         }
+      },
+      "base_correction_link": {
+        "name": "RTK correction link",
+        "state": {
+          "lora": "LoRa radio",
+          "internet": "Internet",
+          "network": "Network RTK"
+        }
+      },
+      "base_lora_channel": {
+        "name": "LoRa channel"
       }
     },
     "switch": {

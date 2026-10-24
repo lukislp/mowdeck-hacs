@@ -91,6 +91,7 @@ What the integration needs from MowDeck:
 | Vision proposals | the newest per mower, polled, own coordinator; changes pushed over the WebSocket (`vision_proposal`) | every 10 minutes; live while the socket is up |
 | Heatmap layers (missed area, heatmap images) | polled, own coordinator: the coverage layer of every mower, the other layers only while their image is enabled | every 30 minutes (a layer is a query over a week of positions) |
 | Planned path of the running job (map image) | polled while a job runs | at most every 30 s |
+| RTK base stations | the list polled, own coordinator; their live values come with the linked mowers' states | every 10 minutes; values live |
 
 Each MowDeck service has its own coordinator: when one fails, only its entities turn unavailable. When one answers "forbidden" (403), a Repairs issue names the permission the token lacks and links to MowDeck's API token page (`/settings/api-tokens`); it disappears with the next successful update.
 
@@ -147,6 +148,7 @@ Per mower one device (manufacturer Mammotion, model from the capabilities, firmw
 | Mowing pattern, Mowing angle, Border laps, Path spacing | `select.luba_mowing_pattern`, `number.luba_mowing_angle`, `number.luba_border_laps`, `number.luba_path_spacing` | the mower's mowing defaults in MowDeck (`MowerOut.mow_defaults`, `PUT /fleet/mowers/{id}/mow-defaults`), shared with the web app and schedules: the pattern among the mower's `native_patterns`, angle 0 to 180°, border laps 0 to 4, path spacing in cm within `path_spacing_range_mm` (only where the model has one; unknown while the mower's own spacing applies). Need `mower.control` |
 | Mowing time today, Distance today, Jobs today, Online time today | `sensor.luba_mowing_time_today`, ... | totals of the current **UTC** day (`/telemetry/mowers/{id}/health/daily`, MowDeck counts days in UTC), every 15 minutes; online time is diagnostic and disabled by default |
 | Position | `device_tracker.luba_position` | GPS (`position` of the state), attributes `heading` (degrees, one decimal) and `position_source` (`rtk`, `gnss` or `dock`) |
+| RTK base station | `sensor.garden_base_rtk_correction_link`, `binary_sensor.garden_base_mower_link`, `update.garden_base_firmware`, ... | a device of its own per RTK base station (see [RTK base stations](#rtk-base-stations)) |
 | Camera | `camera.luba_camera` | the live camera over MowDeck's camera relay as WebRTC (see [Cameras](#cameras)); only for mowers whose capabilities name a camera (`camera` `cloud` or `local`) |
 | Further cameras | `camera.luba_front_right_camera`, ... | one per further camera that delivers video, added after the first stream (see [Cameras](#cameras)) |
 | Start AI analysis | `button.luba_start_ai_analysis` | starts a Vision analysis (see [Vision](#vision-ai-assist)); needs `mower.drive` |
@@ -273,6 +275,23 @@ The leases belong to the API token. As in MowDeck, only the principal that opene
 Which cameras a mower has is only known from a camera session, and opening one starts the mower's stream, so the integration never opens one by itself. Every camera-capable mower gets `Camera` at once: it plays the camera the web app shows first (the first one known to deliver; a front camera on a LUBA 2 AWD X). Its first stream lists the cameras: every other camera that delivers video gets its own entity (`Front right camera` and so on), and the list is kept in Home Assistant's storage so these entities exist after a restart. A camera the relay reports as silent (listed by the vendor but never published, such as the LUBA 2 AWD X's rear camera) gets no entity, and an entity whose camera turned silent is unavailable until a later stream finds it delivering. The attributes `camera_id` and `placement` say which camera an entity plays.
 
 **Still image** (MowDeck 0.8 or newer): `Camera` shows MowDeck's still image of the mower's first camera (`GET /api/v1/fleet/mowers/{id}/camera/snapshot`) in picture cards, thumbnails and `camera.snapshot`. MowDeck takes it with the mower's own photo function or through the camera relay, keeping every camera limit (a sleeping mower is not woken, battery and Vision budget apply), and takes at most one per mower every 30 s. Because every image may start the mower's camera briefly, Home Assistant keeps one for 5 minutes and fetches a newer one in the background while the kept one is shown; only the very first request waits for it (up to 8 s). A mower that cannot take photos, a MowDeck before 0.8 or a token without the plan feature is asked again after an hour, an offline or sleeping mower after a minute. The further camera entities have no still image. The live stream is unaffected.
+
+## RTK base stations
+
+MowDeck 0.11 knows the RTK base station as a device of its own, linked to the mowers that use it ([ADR 0047](https://github.com/lukislp/mowdeck/blob/main/docs/adr/0047-rtk-base-station-as-a-fleet-device.md)). Register it in MowDeck (from the device list of the linked Mammotion account) and link the mower to it; the integration then shows one device per base station, connected through its first linked mower (`via_device`). The base station has no connection of its own: its values come from the reports of a linked mower (`MowerState.base_station`), so they update with the mower's state and stay unknown while no linked mower reports them.
+
+| Entity | Example id | Source |
+| --- | --- | --- |
+| RTK correction link | `sensor.garden_base_rtk_correction_link` | how the corrections reach the mower: `lora` (LoRa radio), `internet`, `network` (network RTK; the mower does not use its base station then) |
+| Mower link | `binary_sensor.garden_base_mower_link` | the mower receives the base station (over LoRa the radio link); unknown while the mower does not say, which includes network RTK |
+| RTK status, Satellites | `sensor.garden_base_rtk_status`, `sensor.garden_base_satellites` | the base station's own solution (`none`, `single`, `float`, `fixed`) and satellites; attribute `details_at` (when the mower last reported them; for Mammotion mowers MowDeck asks about once an hour) |
+| LoRa channel, Wi-Fi signal | `sensor.garden_base_lora_channel`, `sensor.garden_base_wi_fi_signal` | the pairing's LoRa channel and the base station's Wi-Fi in dBm (diagnostic) |
+| Moved | `binary_sensor.garden_base_moved` | the mower reports that the base station was moved since the map was recorded (positions may be shifted) |
+| Position | `device_tracker.garden_base_position` | where the base station stands, as the mower knows it |
+| Firmware | `update.garden_base_firmware` | installed and offered firmware with release notes and progress (`firmware_info`). **Install** sends `POST /fleet/base-stations/{id}/firmware/update` through the first linked mower whose connection can relay it (`base_station_firmware_update`); without such a mower the entity cannot install. Needs `fleet.manage` on the whole account and the plan feature `control`; MowDeck refuses it while the relaying mower mows, returns, updates or drives (every mower of the base station loses its corrections while it restarts). `homeassistant.update_entity` on the entity asks the vendor for the base station's firmware now (`POST .../firmware/check`) |
+
+- The base station list (`GET /fleet/base-stations`) needs `mower.view` on the **whole account**. A token granted on a site, group or single mower, and a MowDeck before 0.11, show no base station devices (no Repairs issue); the mowers' own RTK sensors keep working.
+- The list is read every 10 minutes: a base station registered, renamed or linked in MowDeck shows up then (or after a reload). A base station removed from MowDeck takes its device and entities along.
 
 ## Actions
 

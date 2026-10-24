@@ -174,7 +174,12 @@ class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
         registry = dr.async_get(self.hass)
         entry_id = self.config_entry.entry_id
         for device in dr.async_entries_for_config_entry(registry, entry_id):
-            ids = {identifier for domain, identifier in device.identifiers if domain == DOMAIN}
+            # Base station devices ("base_station_<id>") follow the base station list instead.
+            ids = {
+                identifier
+                for domain, identifier in device.identifiers
+                if domain == DOMAIN and not identifier.startswith("base_station_")
+            }
             if ids and not ids & mower_ids:
                 _LOGGER.debug("Removing the device of %s: no longer visible to the token", ids)
                 registry.async_update_device(device.id, remove_config_entry_id=entry_id)

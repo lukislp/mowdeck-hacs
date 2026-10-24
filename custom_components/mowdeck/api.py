@@ -389,6 +389,35 @@ class MowDeckClient:
         ``FirmwareInfo``. 409 when the connection cannot ask, 503 when the mower is offline."""
         return dict(await self._request("POST", f"{FLEET}/mowers/{mower_id}/firmware/check"))
 
+    async def list_base_stations(self) -> list[dict[str, Any]]:
+        """``GET /fleet/base-stations`` (MowDeck 0.11): the account's RTK base stations with
+        their linked mowers (``can_view`` on the account; 403 for a token scoped below it)."""
+        body = await self._request("GET", f"{FLEET}/base-stations")
+        return [dict(item) for item in body.get("items", [])]
+
+    async def check_base_station_firmware(self, station_id: str) -> dict[str, Any]:
+        """``POST /fleet/base-stations/{id}/firmware/check``: ask the vendor through a linked
+        mower now; the fresh ``FirmwareInfo``. 409 without a linked mower, 503 when no gateway
+        holding one answered."""
+        return dict(
+            await self._request("POST", f"{FLEET}/base-stations/{station_id}/firmware/check")
+        )
+
+    async def update_base_station_firmware(
+        self, station_id: str, version: str, mower_id: str | None = None
+    ) -> dict[str, Any]:
+        """``POST /fleet/base-stations/{id}/firmware/update`` (``can_manage_mowers`` on the
+        account): install the offered ``version`` through the linked mower ``mower_id`` (default
+        the first by name); the 202 ``CommandAccepted``. Never retried."""
+        body: dict[str, Any] = {"version": version}
+        if mower_id is not None:
+            body["mower_id"] = mower_id
+        return dict(
+            await self._request(
+                "POST", f"{FLEET}/base-stations/{station_id}/firmware/update", json=body
+            )
+        )
+
     async def set_mow_defaults(
         self, mower_id: str, pattern: Mapping[str, Any] | None
     ) -> dict[str, Any]:
