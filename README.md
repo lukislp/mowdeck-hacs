@@ -95,6 +95,16 @@ What the integration needs from MowDeck:
 
 Each MowDeck service has its own coordinator: when one fails, only its entities turn unavailable. When one answers "forbidden" (403), a Repairs issue names the permission the token lacks and links to MowDeck's API token page (`/settings/api-tokens`); it disappears with the next successful update.
 
+### Entities that come and go
+
+Which entities a mower has follows its capabilities, the token's permissions on it, its map areas and its schedules, re-read with every update in the table above.
+
+- **Created** only once the mower offers something: an entity for a capability the mower never reported (a camera, the light, manual driving, a maintenance command, a declared setting, firmware updates, ...) is never created, so other models get no phantom entities.
+- **Kept, unavailable** when it goes away for now: a capability the connection stops reporting (the Bluetooth bridge is unplugged and manual driving with the nudges goes with it, a link that no longer declares a setting, a camera, the light, firmware updates, a service such as Vision or the Scheduler that is not answering) or a permission the token lost. The entity stays in the entity registry with its entity id, name, icon, area and enabled state, so automations and dashboards keep pointing at it; its state is `unavailable`. When the mower offers it again it is available under the same entity id, with the range or options declared then; nothing is created twice. Losing a permission is treated the same way, because a token's grants can be changed back: the entity is kept unavailable rather than removed (a service that answers 403 also raises the Repairs issue above).
+- **Removed** only when what it stands for is gone for good: a schedule deleted in MowDeck (or a group schedule of a group the mower left) takes its switch and buttons along; a map area that is no longer on the mower's map takes its switch along; a mower no longer visible to the token, or a base station removed from MowDeck, takes its device with every entity.
+
+After a Home Assistant restart while a capability is missing, the kept entities show as unavailable ("no longer provided") until the mower offers them again. To keep an unused one out of the way, disable it in its entity settings.
+
 ## Repairs
 
 | Issue | When | Goes away |
@@ -184,8 +194,8 @@ MowDeck reads and changes some of the mower's own settings (the ones the vendor 
 
 For a LUBA 2 (AWD) these are: **Rain detection**, **Turning style** (turn in place, multi-point turn), **Route between areas** (direct, along the perimeter), **Side lights**, **Night light** (models with a fill light), **Wildlife protection** (off, stop mowing, mow slowly; firmware that supports it), **Voice prompts**, **Voice volume** (0 to 100 %), **Voice** (male, female), **Non-working hours**, and from firmware 2.1.1.5 on **Return to charge at** (15 to 30 %), **Smart return level**, **Resume mowing at** (40 to 100 %) and **Smart resume level**. A setting MowDeck knows no name for shows as "Setting *key*".
 
-- The entities follow the declaration: a setting the mower no longer declares (other firmware, other connection) disappears with its entities. A value the mower has not reported yet is unknown; after a change the new value shows once the mower reports it.
-- Changing a setting needs `fleet.manage` on the mower (`can_manage_mowers`, like a firmware update) and the plan feature `control`; without it the entities are not created. The mower's controller checks the value against the declaration; a refused change raises an error with MowDeck's reason (see below).
+- The entities follow the declaration: a setting the mower stops declaring (its link is down, other firmware) leaves its entities registered and unavailable; declared again they are available with the range, step, unit or options of the new declaration (see [Entities that come and go](#entities-that-come-and-go)). A value the mower has not reported yet is unknown; after a change the new value shows once the mower reports it.
+- Changing a setting needs `fleet.manage` on the mower (`can_manage_mowers`, like a firmware update) and the plan feature `control`; without it the entities are not created (or unavailable when the token loses it). The mower's controller checks the value against the declaration; a refused change raises an error with MowDeck's reason (see below).
 - While the non-working hours are off, setting their start or end switches them on with the other bound from the last window seen (else one hour apart). Start and end must differ.
 - A setting never makes the mower move.
 
@@ -479,7 +489,7 @@ All five need the plan feature `control`. Leaving the dock is ordinary control (
 
 **Emergency nudges** (as in Mammotion-HA): four buttons that move a stuck mower a little. Each press sends one `manual_drive` frame, `linear` or `angular` 0.4 for `ttl_ms` 500 with the blades off; MowDeck's dead-man timer stops the wheels after 500 ms. Left turns are positive.
 
-- Only for mowers MowDeck can drive (`manual_drive`); **Emergency nudge back** only where the mower may reverse (`drive_reverse`). Over the Mammotion cloud alone `manual_drive` is false (MowDeck drives Mammotion mowers over the Bluetooth bridge), so the nudges stay hidden.
+- Only for mowers MowDeck can drive (`manual_drive`); **Emergency nudge back** only where the mower may reverse (`drive_reverse`). Over the Mammotion cloud alone `manual_drive` is false (MowDeck drives Mammotion mowers over the Bluetooth bridge), so the nudges stay hidden. Once created, the nudges stay when the bridge is unplugged: they turn unavailable and come back with the bridge, as you set them up.
 - Configuration, disabled by default; need `mower.drive` on the mower and the plan feature `control` (like every command but the emergency stop).
 - MowDeck refuses a nudge during a sensor stop (lift, tilt, collision), while the mower mows or returns (pause it first), while a start or return waits for its confirmation, and during a spot run, drive calibration or firmware update. A drive-recoverable error (stuck, wheel slip) is the case they are for and is accepted.
 

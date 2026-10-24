@@ -336,8 +336,9 @@ async def test_permissions_and_declaration_changes(
     loaded_entry: MockConfigEntry,
     entity_registry: er.EntityRegistry,
 ) -> None:
-    """A 403 names fleet.manage; without can_manage_mowers, or once the mower stops declaring
-    a setting, its entities go away."""
+    """A 403 names fleet.manage; without can_manage_mowers, or while the mower does not declare
+    a setting, its entities stay registered and are unavailable. A declaration that comes back
+    with other bounds or options brings them along."""
     fake_api.forbid_commands = True
     with pytest.raises(HomeAssistantError) as err:
         await call(hass, "switch", SERVICE_TURN_ON, NIGHT_LIGHT)
@@ -347,20 +348,47 @@ async def test_permissions_and_declaration_changes(
         "permission": "fleet.manage",
     }
     fake_api.forbid_commands = False
+    entity_registry.async_update_entity(NIGHT_LIGHT, name="Night lamp")
 
-    fake_api.capabilities[MOWER_ID]["settings"] = [s for s in SETTINGS if s["type"] != "bool"]
+    fake_api.capabilities[MOWER_ID]["settings"] = [
+        s for s in SETTINGS if s["type"] not in ("bool", "enum")
+    ]
     await refresh_static(loaded_entry)
     await hass.async_block_till_done()
-    assert entity_registry.async_get(NIGHT_LIGHT) is None
-    assert entity_registry.async_get(VOLUME) is not None
+    for entity_id in (NIGHT_LIGHT, TURN_STYLE):
+        assert entity_registry.async_get(entity_id) is not None, entity_id
+        assert state_of(hass, entity_id).state == STATE_UNAVAILABLE, entity_id
+    assert state_of(hass, VOLUME).state == "60"
+
+    changed = [{**s, "max": 80, "step": 10} if s["key"] == "voice_volume" else s for s in SETTINGS]
+    changed = [
+        {**s, "options": ["in_place", "multi_point", "zero_turn"]}
+        if s["key"] == "turn_style"
+        else s
+        for s in changed
+    ]
+    fake_api.capabilities[MOWER_ID]["settings"] = changed
+    await refresh_static(loaded_entry)
+    await hass.async_block_till_done()
+    assert state_of(hass, NIGHT_LIGHT).state == STATE_OFF
+    assert state_of(hass, NIGHT_LIGHT).attributes["friendly_name"].endswith("Night lamp")
+    assert state_of(hass, TURN_STYLE).attributes["options"] == [
+        "in_place",
+        "multi_point",
+        "zero_turn",
+    ]
+    assert state_of(hass, VOLUME).attributes["max"] == 80
+    assert state_of(hass, VOLUME).attributes["step"] == 10
 
     fake_api.relations = {"can_view", "can_control", "can_drive"}
     await refresh_static(loaded_entry)
     await hass.async_block_till_done()
     for entity_id in (VOLUME, TURN_STYLE, QUIET_START, QUIET_END, QUIET_OFF):
-        assert entity_registry.async_get(entity_id) is None, entity_id
-    # The rain sensor only reads: it stays.
+        assert entity_registry.async_get(entity_id) is not None, entity_id
+        assert state_of(hass, entity_id).state == STATE_UNAVAILABLE, entity_id
+    # The rain sensor only reads: it stays available.
     assert hass.states.get(RAIN) is not None
+    assert state_of(hass, RAIN).state != STATE_UNAVAILABLE
 
 
 @pytest.mark.usefixtures("settings_mower", "loaded_entry")

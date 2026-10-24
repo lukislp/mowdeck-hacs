@@ -100,6 +100,25 @@ async def test_area_switches_and_select(hass: HomeAssistant, fake_api: FakeMowDe
     assert sent(fake_api) == [{"kind": "start_mow", "area_ids": ["zone-back"]}]
 
 
+async def test_removed_area_takes_its_switch_along(
+    hass: HomeAssistant,
+    fake_api: FakeMowDeck,
+    loaded_entry: MockConfigEntry,
+    entity_registry: er.EntityRegistry,
+) -> None:
+    """An area that is no longer on the mower's map is gone for good: its switch leaves the
+    registry, the other areas keep theirs."""
+    assert entity_registry.async_get(BACK) is not None
+    fake_api.maps[MOWER_ID]["areas"] = fake_api.maps[MOWER_ID]["areas"][:1]
+    fake_api.maps[MOWER_ID]["revision"] = "rev-2"
+    coordinator = loaded_entry.runtime_data.coordinator
+    coordinator._static_fetched_at.clear()
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert entity_registry.async_get(BACK) is None
+    assert state_of(hass, FRONT).state == "on"
+
+
 async def test_three_areas_two_selected(
     hass: HomeAssistant, fake_api: FakeMowDeck, loaded_entry: MockConfigEntry
 ) -> None:
@@ -185,7 +204,7 @@ async def test_mowing_defaults_need_control(
     loaded_entry: MockConfigEntry,
     entity_registry: er.EntityRegistry,
 ) -> None:
-    """A 403 names mower.control; without can_control the entities go away."""
+    """A 403 names mower.control; without can_control the entities stay, unavailable."""
     patterns.relations = {"can_view"}
     with pytest.raises(HomeAssistantError) as err:
         await call(hass, "number", SERVICE_SET_VALUE, ANGLE, **{ATTR_VALUE: 10})
@@ -198,7 +217,8 @@ async def test_mowing_defaults_need_control(
     await coordinator.async_refresh()
     await hass.async_block_till_done()
     for entity_id in (PATTERN, ANGLE, LAPS, SPACING):
-        assert entity_registry.async_get(entity_id) is None, entity_id
+        assert entity_registry.async_get(entity_id) is not None, entity_id
+        assert state_of(hass, entity_id).state == "unavailable", entity_id
 
 
 @pytest.mark.usefixtures("loaded_entry")

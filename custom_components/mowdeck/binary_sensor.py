@@ -12,7 +12,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
-from homeassistant.const import EntityCategory, Platform
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 
 from .base_station import (
@@ -100,7 +100,6 @@ async def async_setup_entry(
         lambda coordinator, m: (
             [RainHoldBinarySensor(coordinator, m, scheduler)] if scheduler.data.available else []
         ),
-        domain=Platform.BINARY_SENSOR,
         fingerprint=lambda m: scheduler.data.available,
         listen=[scheduler],
     )

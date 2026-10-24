@@ -19,7 +19,6 @@ from homeassistant.const import (
     PERCENTAGE,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     EntityCategory,
-    Platform,
     UnitOfArea,
     UnitOfLength,
     UnitOfSpeed,
@@ -506,7 +505,6 @@ async def async_setup_entry(
             for d in SENSORS
             if d.exists_fn(coordinator.data.capabilities.get(m) or {})
         ],
-        domain=Platform.SENSOR,
     )
     vision = entry.runtime_data.vision
     async_add_mower_entities(
@@ -515,7 +513,6 @@ async def async_setup_entry(
         lambda coordinator, m: (
             [VisionSensor(coordinator, m, vision)] if vision.data.available else []
         ),
-        domain=Platform.SENSOR,
         fingerprint=lambda m: vision.data.available,
         listen=[vision],
     )
@@ -527,7 +524,6 @@ async def async_setup_entry(
             if (coordinator.data.capabilities.get(m) or {}).get("manual_drive")
             else []
         ),
-        domain=Platform.SENSOR,
     )
     heatmap = entry.runtime_data.heatmap
     async_add_mower_entities(
@@ -536,7 +532,6 @@ async def async_setup_entry(
         lambda coordinator, m: (
             [MissedAreaSensor(coordinator, m, heatmap)] if coordinator.data.maps.get(m) else []
         ),
-        domain=Platform.SENSOR,
         fingerprint=lambda m: bool(entry.runtime_data.coordinator.data.maps.get(m)),
     )
     scheduler = entry.runtime_data.scheduler
@@ -548,7 +543,6 @@ async def async_setup_entry(
             if scheduler.data.available
             else []
         ),
-        domain=Platform.SENSOR,
         fingerprint=lambda m: scheduler.data.available,
         listen=[scheduler],
     )

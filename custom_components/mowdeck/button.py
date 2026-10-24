@@ -78,8 +78,8 @@ async def async_setup_entry(
             buttons.append(BladeChangedButton(coordinator, mower_id, entry))
         return buttons
 
-    async_add_mower_entities(entry, async_add_entities, entities, domain=Platform.BUTTON)
-    async_add_mower_entities(entry, async_add_entities, maintenance_buttons, domain=Platform.BUTTON)
+    async_add_mower_entities(entry, async_add_entities, entities)
+    async_add_mower_entities(entry, async_add_entities, maintenance_buttons)
 
     vision = entry.runtime_data.vision
     async_add_mower_entities(
@@ -90,7 +90,6 @@ async def async_setup_entry(
             if vision.data.available and coordinator.permitted(m, CAN_DRIVE)
             else []
         ),
-        domain=Platform.BUTTON,
         fingerprint=lambda m: (
             entry.runtime_data.coordinator.fingerprint(m),
             vision.data.available,
@@ -115,6 +114,7 @@ async def async_setup_entry(
         async_add_entities,
         schedule_buttons,
         domain=Platform.BUTTON,
+        gone=scheduler.schedule_gone,
         fingerprint=scheduler.fingerprint,
         listen=[scheduler],
     )
@@ -126,7 +126,6 @@ async def async_setup_entry(
         lambda c, m: setting_entities(
             c, m, "time_window", lambda c, m, key: [SettingClearButton(c, m, key)]
         ),
-        domain=Platform.BUTTON,
     )
 
 

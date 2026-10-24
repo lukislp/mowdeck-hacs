@@ -23,7 +23,6 @@ from homeassistant.components.update import (
     UpdateEntityDescription,
     UpdateEntityFeature,
 )
-from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .base_station import (
@@ -59,7 +58,6 @@ async def async_setup_entry(
             if (coordinator.data.capabilities.get(m) or {}).get("firmware_update")
             else []
         ),
-        domain=Platform.UPDATE,
     )
     async_add_base_station_entities(
         entry,

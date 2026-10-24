@@ -6,7 +6,12 @@ from typing import Any
 
 import pytest
 from homeassistant.components.button import SERVICE_PRESS
-from homeassistant.const import ATTR_ENTITY_ID, SERVICE_TURN_OFF, SERVICE_TURN_ON
+from homeassistant.const import (
+    ATTR_ENTITY_ID,
+    SERVICE_TURN_OFF,
+    SERVICE_TURN_ON,
+    STATE_UNAVAILABLE,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
@@ -134,7 +139,8 @@ async def test_permissions_decide_the_entities(
     entity_registry: er.EntityRegistry,
 ) -> None:
     """Without schedule.edit there is no switch and no skip button; without mower.control no
-    run button either. The sensors stay."""
+    run button either. The sensors stay. A permission lost later leaves the button registered
+    and unavailable."""
     fake_api.relations = {"can_view"}
     config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(config_entry.entry_id)
@@ -152,7 +158,9 @@ async def test_permissions_decide_the_entities(
     fake_api.relations = {"can_view"}
     await refresh(config_entry)
     await hass.async_block_till_done()
-    assert entity_registry.async_get(RUN_NOW) is None
+    assert entity_registry.async_get(RUN_NOW) is not None
+    assert state_of(hass, RUN_NOW).state == STATE_UNAVAILABLE
+    assert hass.states.get(SWITCH) is None
     await hass.config_entries.async_unload(config_entry.entry_id)
     await hass.async_block_till_done()
 
@@ -211,6 +219,34 @@ async def test_deleted_schedule_removes_its_entities(
         assert entity_registry.async_get(entity_id) is None, entity_id
     assert state_of(hass, NEXT_MOW).state == "unknown"
     assert state_of(hass, LAST_RUN).state == "unknown"
+
+
+async def test_schedule_entities_outlive_a_lost_permission(
+    hass: HomeAssistant,
+    fake_api: FakeMowDeck,
+    loaded_entry: MockConfigEntry,
+    entity_registry: er.EntityRegistry,
+) -> None:
+    """Without the relations on the mower the schedule's switch and buttons stay registered
+    and unavailable (the schedule still exists); with them back they work again."""
+    fake_api.relations = {"can_view"}
+    await refresh(loaded_entry)
+    await hass.async_block_till_done()
+    for entity_id in (SWITCH, RUN_NOW, SKIP_NEXT):
+        assert entity_registry.async_get(entity_id) is not None, entity_id
+        assert state_of(hass, entity_id).state == STATE_UNAVAILABLE, entity_id
+
+    fake_api.relations = {
+        "can_view",
+        "can_control",
+        "can_drive",
+        "can_manage_mowers",
+        "can_edit_schedule",
+    }
+    await refresh(loaded_entry)
+    await hass.async_block_till_done()
+    for entity_id in (SWITCH, RUN_NOW, SKIP_NEXT):
+        assert state_of(hass, entity_id).state != STATE_UNAVAILABLE, entity_id
 
 
 async def test_dry_lawn(

@@ -39,7 +39,6 @@ async def async_setup_entry(
             if coordinator.data.capabilities.get(m, {}).get("light")
             else []
         ),
-        domain=Platform.SWITCH,
     )
     async_add_mower_entities(
         entry,
@@ -48,6 +47,7 @@ async def async_setup_entry(
             AreaSwitch(coordinator, m, str(area["id"])) for area in coordinator.areas(m)
         ],
         domain=Platform.SWITCH,
+        gone=lambda entity: isinstance(entity, AreaSwitch) and entity.area_gone,
     )
     async_add_mower_entities(
         entry,
@@ -55,7 +55,6 @@ async def async_setup_entry(
         lambda coordinator, m: setting_entities(
             coordinator, m, "bool", lambda c, mower, key: [SettingSwitch(c, mower, key)]
         ),
-        domain=Platform.SWITCH,
     )
     scheduler = entry.runtime_data.scheduler
     async_add_mower_entities(
@@ -67,6 +66,7 @@ async def async_setup_entry(
             if scheduler.permitted(s, CAN_EDIT_SCHEDULE, CAN_CONTROL)
         ],
         domain=Platform.SWITCH,
+        gone=scheduler.schedule_gone,
         fingerprint=scheduler.fingerprint,
         listen=[scheduler],
     )
@@ -169,6 +169,14 @@ class AreaSwitch(MowDeckEntity, SwitchEntity):
 
     def _label(self) -> str:
         return dict(self.coordinator.area_labels(self.mower_id)).get(self.area_id, self.area_id)
+
+    @property
+    def area_gone(self) -> bool:
+        """The mower has a map and the area is no longer on it (removed or mapped anew)."""
+        coordinator = self.coordinator
+        return bool(coordinator.data.maps.get(self.mower_id)) and self.area_id not in {
+            str(area["id"]) for area in coordinator.areas(self.mower_id)
+        }
 
     @callback
     def _handle_coordinator_update(self) -> None:

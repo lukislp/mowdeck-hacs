@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 from homeassistant.components.button import SERVICE_PRESS
-from homeassistant.const import ATTR_ENTITY_ID, EntityCategory
+from homeassistant.const import ATTR_ENTITY_ID, STATE_UNAVAILABLE, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
@@ -177,33 +177,75 @@ async def test_permissions(
         assert err.value.translation_placeholders["permission"] == permission
     fake_api.forbid_commands = False
 
+    # Without the relations the buttons stay registered but unavailable.
     fake_api.relations = {"can_view", "can_control"}
     await refresh_static(loaded_entry)
     await hass.async_block_till_done()
-    assert entity_registry.async_get(LEAVE_DOCK) is not None
+    assert hass.states.get(LEAVE_DOCK).state != STATE_UNAVAILABLE  # type: ignore[union-attr]
     for entity_id in [*MAINTENANCE[1:], *NUDGES]:
-        assert entity_registry.async_get(entity_id) is None, entity_id
+        assert entity_registry.async_get(entity_id) is not None, entity_id
+        assert hass.states.get(entity_id).state == STATE_UNAVAILABLE, entity_id  # type: ignore[union-attr]
 
 
 @pytest.mark.usefixtures("capable_mower")
 async def test_capabilities(
     hass: HomeAssistant,
     fake_api: FakeMowDeck,
-    loaded_entry: MockConfigEntry,
+    config_entry: MockConfigEntry,
     entity_registry: er.EntityRegistry,
 ) -> None:
-    """Only the listed maintenance commands; no reverse nudge without drive_reverse, no nudge
-    without manual_drive."""
+    """Only the listed maintenance commands; no reverse nudge without drive_reverse. A command
+    the mower never listed gets no entity at all."""
     fake_api.capabilities[MOWER_ID].update({"maintenance": ["sync_map"], "drive_reverse": False})
-    await refresh_static(loaded_entry)
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert entity_registry.async_get(SYNC_MAP) is not None
     for entity_id in (LEAVE_DOCK, RESTART, RELOCATE_DOCK, RESYNC_RTK, BACK):
         assert entity_registry.async_get(entity_id) is None, entity_id
     assert entity_registry.async_get(FORWARD) is not None
+    await hass.config_entries.async_unload(config_entry.entry_id)
+    await hass.async_block_till_done()
 
-    fake_api.capabilities[MOWER_ID].update({"maintenance": [], "manual_drive": False})
+
+@pytest.mark.usefixtures("capable_mower", "fast_results")
+async def test_nudges_survive_an_unplugged_bridge(
+    hass: HomeAssistant,
+    fake_api: FakeMowDeck,
+    loaded_entry: MockConfigEntry,
+    entity_registry: er.EntityRegistry,
+) -> None:
+    """Without the Bluetooth bridge there is no manual drive: the nudges the owner enabled and
+    renamed stay registered and turn unavailable, and come back as they were with the bridge."""
+    entity_registry.async_update_entity(FORWARD, disabled_by=None, name="Push free")
+    await hass.config_entries.async_reload(loaded_entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(FORWARD) is not None
+    registered = len(er.async_entries_for_config_entry(entity_registry, loaded_entry.entry_id))
+
+    fake_api.capabilities[MOWER_ID].update({"manual_drive": False, "maintenance": []})
     await refresh_static(loaded_entry)
     await hass.async_block_till_done()
     for entity_id in [*MAINTENANCE, *NUDGES]:
-        assert entity_registry.async_get(entity_id) is None, entity_id
+        assert entity_registry.async_get(entity_id) is not None, entity_id
+    forward = entity_registry.async_get(FORWARD)
+    assert forward is not None
+    assert forward.disabled_by is None
+    assert forward.name == "Push free"
+    assert hass.states.get(FORWARD).state == STATE_UNAVAILABLE  # type: ignore[union-attr]
+    assert hass.states.get(LEAVE_DOCK).state == STATE_UNAVAILABLE  # type: ignore[union-attr]
+
+    fake_api.capabilities[MOWER_ID].update(
+        {"manual_drive": True, "maintenance": ["leave_dock", "sync_map"]}
+    )
+    await refresh_static(loaded_entry)
+    await hass.async_block_till_done()
+    assert hass.states.get(FORWARD).state != STATE_UNAVAILABLE  # type: ignore[union-attr]
+    assert hass.states.get(LEAVE_DOCK).state != STATE_UNAVAILABLE  # type: ignore[union-attr]
+    assert hass.states.get(FORWARD).attributes["friendly_name"].endswith("Push free")  # type: ignore[union-attr]
+    assert (
+        len(er.async_entries_for_config_entry(entity_registry, loaded_entry.entry_id)) == registered
+    )
+    assert entity_registry.async_get(f"{FORWARD}_2") is None
+    await press(hass, FORWARD)
+    assert sent(fake_api)[-1]["kind"] == "manual_drive"

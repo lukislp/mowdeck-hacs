@@ -21,7 +21,6 @@ from homeassistant.const import (
     DEGREE,
     PERCENTAGE,
     EntityCategory,
-    Platform,
     UnitOfLength,
     UnitOfSpeed,
     UnitOfTime,
@@ -93,13 +92,12 @@ async def async_setup_entry(
                 numbers.append(PathSpacingNumber(coordinator, mower_id))
         return numbers
 
-    async_add_mower_entities(entry, async_add_entities, entities, domain=Platform.NUMBER)
+    async_add_mower_entities(entry, async_add_entities, entities)
 
     async_add_mower_entities(
         entry,
         async_add_entities,
         lambda c, m: setting_entities(c, m, "int", lambda c, m, key: [SettingNumber(c, m, key)]),
-        domain=Platform.NUMBER,
     )
 
     health = entry.runtime_data.health
@@ -112,7 +110,6 @@ async def async_setup_entry(
             if blade_threshold_settable(health, m) and c.permitted(m, CAN_MANAGE_MOWERS)
             else []
         ),
-        domain=Platform.NUMBER,
         fingerprint=lambda m: (coordinator.fingerprint(m), blade_threshold_settable(health, m)),
         listen=[health],
     )
