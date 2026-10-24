@@ -21,21 +21,52 @@ Manually: unpack `mowdeck.zip` of a [release](https://github.com/lukislp/mowdeck
 
 ## Create an API token in MowDeck
 
-In the MowDeck web app: **Settings, API tokens, New token**. Give it a name ("Home Assistant"), the level (the whole account, or a site, group or single mower) and the permissions:
+In the MowDeck web app (0.16.1 or newer): **Settings, API tokens** (`/settings#api-tokens`). Give the token a name ("Home Assistant") and pick a preset:
+
+| Preset | Permissions | In Home Assistant |
+| --- | --- | --- |
+| Nur ansehen | `mower.view` | read only: states, map, cameras, health, schedules, notifications |
+| Home Assistant – Grundfunktionen (default) | `mower.view`, `mower.control` | also start, pause, dock, end job, blade height, mowing speed, light, **Run now** |
+| Home Assistant – vollständig | adds `mower.drive`, `fleet.manage`, `schedule.edit` | everything the integration offers (mowdeck-hacs 0.17 and newer) |
+| Eigene Auswahl | any keys an API token may hold, from the permission catalogue | as chosen |
+
+**Choose "Home Assistant – vollständig" for the full feature set.** The web app marks `mower.drive` and `fleet.manage` as powerful rights: they move the mower directly, change its settings and can install firmware. Pick "Grundfunktionen" when Home Assistant should only run and watch the mower.
+
+Every token from the web app is granted on the whole account. That matters: notifications and the RTK base station devices need `mower.view` on the whole account.
+
+What each permission unlocks:
 
 | Permission | Needed for |
 | --- | --- |
-| `mower.view` | required: mowers, states, map, live updates, the cameras, the health totals, **Check firmware now**. **Grant it on the whole account** to receive MowDeck notifications: only an account-wide `mower.view` implies `notifications.view`, which MowDeck needs to push the account's notifications to a token |
-| `mower.control` | start, pause, dock, end job, blade height, mowing speed, light (without it Home Assistant is read only; the emergency stop works for viewers too) |
-| `mower.drive` | optional: the manual drive speed setting (the number is disabled by default), **Start AI analysis** (Vision) and `mowdeck.spot_mow` (together with `mower.control`, which the Planner needs); also needed on a mower for its Vision notifications (`vision_proposal`, `vision_auto_proposal`) |
-| `fleet.manage` | optional: installing a firmware update from the update entity, **Blade changed**, the **Blade change reminder** number, the [mower's own settings](#mower-settings) |
-| `schedule.edit` | optional: the schedule switches and **Skip next run** buttons (together with `mower.control`, which **Run now** needs alone). Seeing schedules, the next mowing, the last run and the rain decision only needs `mower.view` (`scheduler.view` follows it) |
+| `mower.view` | required: mowers, states, map, live updates, the cameras, the health totals, **Check firmware now**, schedules, the next mowing, the last run and the rain decision, notifications, the base station devices |
+| `mower.control` | start, pause, dock, end job, blade height, mowing speed, light, the mowing defaults, **Run now**, **Leave the dock**, **Stop spot run** (without it Home Assistant is read only; the emergency stop works for viewers too) |
+| `mower.drive` | the emergency nudge buttons, the manual drive speed setting, `mowdeck.spot_mow` (together with `mower.control`, which the Planner needs), **Start AI analysis** (Vision) and the Vision notifications (`vision_proposal`, `vision_auto_proposal`) |
+| `fleet.manage` | the [mower's own settings](#mower-settings), the maintenance buttons (**Restart mower**, **Read map again**, **Relocate charging station**, **Read RTK and dock position again**), **Blade changed**, the **Blade change reminder** number, installing mower firmware and the RTK base station's firmware |
+| `schedule.edit` | the schedule switches and **Skip next run** buttons (together with `mower.control`) |
+
+Implied rights are included: MowDeck derives them from the keys above, so you do not pick them yourself. An account-wide `mower.view` implies `notifications.view` (MowDeck pushes the account's notifications only to a token that holds it) and `scheduler.view`.
 
 The integration asks MowDeck which of these the token holds on each mower (`POST /api/v1/identity/me/permissions`, every 10 minutes) and only creates entities whose action the token may run; a MowDeck that cannot answer that question hides nothing, and a refused action names the missing permission.
 
-**After updating MowDeck, issue the token again**: a token keeps the permissions it was created with, so a token from before MowDeck 0.7.0 holds no `notifications.view` and receives no notifications even with an account-wide `mower.view`. Create a new token with the same grants and enter it with **Reconfigure** on the integration, then revoke the old one.
+**Changing the rights means a new token.** A token keeps the permissions it was created with. To add rights (for example to move from "Grundfunktionen" to "vollständig", or after updating MowDeck: a token from before MowDeck 0.7.0 holds no `notifications.view`), create a new token with the preset you want, enter it with **Reconfigure** on the integration, then revoke the old one.
 
-The secret (`mdk_...`) is shown once. Through the API: `POST /api/v1/identity/accounts/{account_id}/api-tokens` with `{"name": "Home Assistant", "grants": [{"level": {"type": "account", "id": "<account id>"}, "permissions": ["mower.view", "mower.control"]}]}`.
+The secret (`mdk_...`) is shown once.
+
+**Advanced: through the API.** The web app is the normal way. The API can also create a token, and only the API offers grants on a site, group or single mower (one entry in `grants` per level; such a token receives no notifications and no base station devices). The full preset as an API call:
+
+```http
+POST /api/v1/identity/accounts/{account_id}/api-tokens
+
+{
+  "name": "Home Assistant",
+  "grants": [
+    {
+      "level": {"type": "account", "id": "<account id>"},
+      "permissions": ["mower.view", "mower.control", "mower.drive", "fleet.manage", "schedule.edit"]
+    }
+  ]
+}
+```
 
 ## Configuration
 
@@ -500,17 +531,17 @@ All five need the plan feature `control`. Leaving the dock is ordinary control (
 ## Troubleshooting
 
 - **"MowDeck live updates are refused" (Repairs)**: the Realtime WebSocket closes with 4401 even with a fresh access token. Check that the token still exists and has `mower.view`. Polling continues meanwhile; the issue disappears when the socket works again.
-- **No notifications arrive**: the token lacks `notifications.view`. Grant `mower.view` on the whole account (not a site, group or mower) and, after updating MowDeck to 0.7.0 or newer, issue a new token (old tokens keep their old permission set). Vision notifications also need `mower.drive` on the mower. Notifications raised while the live connection was down are not delivered later.
+- **No notifications arrive**: the token lacks `notifications.view`. It needs `mower.view` on the whole account, which every token from the web app has (a token the API granted on a site, group or mower receives none); after updating MowDeck to 0.7.0 or newer, issue a new token (old tokens keep their old permission set) and enter it with **Reconfigure**. Vision notifications also need `mower.drive` on the mower. Notifications raised while the live connection was down are not delivered later.
 - **Reauthentication requested**: the API token was revoked, expired or its owner disabled. Create a new token and enter it in the reauth dialog (it must belong to the same account).
 - **Cannot connect**: use the URL that Home Assistant itself can reach (the Docker network, the LAN address, or the Tailscale name). Behind Tailscale, the Home Assistant host must be in the tailnet; MagicDNS names such as `https://mowdeck.<tailnet>.ts.net` work once HTTPS certificates are enabled for the tailnet.
 - **HTTPS**: with `https://` the WebSocket uses `wss://` on the same host. Self-signed certificates are not accepted; use Tailscale HTTPS or a certificate from a public CA.
-- **Commands fail with "may not send"**: the token lacks the permission the message names on that mower (`mower.control` for the job commands, `mower.drive` for the drive speed, `fleet.manage` for firmware updates).
+- **Commands fail with "may not send"**: the token lacks the permission the message names on that mower (`mower.control` for the job commands, `mower.drive` for the drive speed and the nudges, `fleet.manage` for firmware updates and maintenance). Create a token with "Home Assistant – vollständig" and enter it with **Reconfigure**.
 - **Camera stays black or "connecting"**: the browser does not reach the relay's media port. Check from the same device that `RELAY_ICE_HOSTS` contains an address it can reach and that port 8189 (UDP and TCP) is open on the MowDeck host; the MowDeck web app on that device shows the same problem then.
 - **"The mower's camera did not start in time"**: the mower did not publish within 40 s (4G gaps, a sleeping mower that wakes slowly). Open the camera again.
 - **"MowDeck refuses the mower health data" (Repairs)**: the health totals answer 403 for the token. Grant the named permission; the issue disappears with the next update (every 15 minutes).
 - **"MowDeck refuses the heatmaps" (Repairs)**: the heatmap layers answer 403 for the token; grant `mower.view`. The map image keeps working, the heatmap images and the missed area are unavailable until the next successful update.
 - **"MowDeck refuses the schedules" (Repairs)**: the Scheduler answers 403; grant `mower.view` (or `scheduler.view`) to the token. A MowDeck without the Scheduler simply shows no schedule or rain entities.
-- **No schedule switch or skip button**: the token lacks `schedule.edit` (or `mower.control`) on the schedule's mower or group; MowDeck is asked every 5 minutes, so new grants show up without a restart.
+- **No schedule switch or skip button**: the token lacks `schedule.edit` (or `mower.control`) on the schedule's mower or group. Create a token with "Home Assistant – vollständig" and enter it with **Reconfigure**.
 - **Diagnostics** (three dots on the entry) contain mowers, states, capabilities, the token's permissions per mower, the health totals and the realtime status; the API token, connection options, serials, vendor ids, positions and all coordinates are redacted, and maps are reduced to counts (no area names or boundaries).
 
 ## Removal
