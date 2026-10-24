@@ -1,5 +1,5 @@
-"""Selects of a MowDeck mower: which map areas "start mowing" mows, and the mowing pattern of
-the mower's mowing defaults.
+"""Selects of a MowDeck mower: which map areas "start mowing" mows, the mowing pattern of the
+mower's mowing defaults, and one per option setting the mower declares (``settings.py``).
 
 The area select is the shortcut (all areas or one); the area switches (``switch.py``) make the
 multi-area selection, which the select then shows as ``selection``. Both edit the same
@@ -18,6 +18,7 @@ from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
 
 from .const import ALL_AREAS, CAN_CONTROL, PATTERNS, SEVERAL_AREAS
 from .entity import MowDeckEntity, async_add_mower_entities
+from .settings import SettingEntity, setting_entities
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -50,6 +51,12 @@ async def async_setup_entry(
         return selects
 
     async_add_mower_entities(entry, async_add_entities, entities, domain=Platform.SELECT)
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        lambda c, m: setting_entities(c, m, "enum", lambda c, m, key: [SettingSelect(c, m, key)]),
+        domain=Platform.SELECT,
+    )
 
 
 @dataclass
@@ -168,3 +175,24 @@ async def async_save_mow_defaults(entity: MowDeckEntity, change: dict[str, Any])
         "mower.control",
     )
     coordinator.async_set_mower(mower)
+
+
+class SettingSelect(SettingEntity, SelectEntity):
+    """An option setting of the mower (``set_setting`` with one of the declared options)."""
+
+    setting_type = "enum"
+
+    @property
+    def options(self) -> list[str]:
+        """The declared options, in the declared order."""
+        return [str(option) for option in self.spec.get("options") or []]
+
+    @property
+    def current_option(self) -> str | None:
+        """The reported option; unknown while the mower has not reported one it declares."""
+        value = self.setting_value
+        return value if isinstance(value, str) and value in self.options else None
+
+    async def async_select_option(self, option: str) -> None:
+        """Send the option."""
+        await self.async_set_setting(option)

@@ -25,6 +25,7 @@ from .const import (
     DEFAULT_EXPOSE_EMERGENCY_STOP,
 )
 from .entity import MowDeckEntity, ScheduleEntity, async_add_mower_entities
+from .settings import SettingEntity, setting_entities
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -116,6 +117,16 @@ async def async_setup_entry(
         domain=Platform.BUTTON,
         fingerprint=scheduler.fingerprint,
         listen=[scheduler],
+    )
+
+    # Switching a time window setting off (its start and end are time entities).
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        lambda c, m: setting_entities(
+            c, m, "time_window", lambda c, m, key: [SettingClearButton(c, m, key)]
+        ),
+        domain=Platform.BUTTON,
     )
 
 
@@ -379,3 +390,18 @@ class VisionStartButton(MowDeckEntity, ButtonEntity):
             "mower.drive",
         )
         self._vision.async_set_proposal(self.mower_id, proposal)
+
+
+class SettingClearButton(SettingEntity, ButtonEntity):
+    """Switches a time window setting off (``set_setting`` with null), for example the
+    non-working hours; setting its start or end switches it on again."""
+
+    setting_type = "time_window"
+
+    def __init__(self, coordinator: MowDeckCoordinator, mower_id: str, key: str) -> None:
+        """Create the button of the setting ``key``."""
+        super().__init__(coordinator, mower_id, key, "clear")
+
+    async def async_press(self) -> None:
+        """Switch the window off."""
+        await self.async_set_setting(None)
