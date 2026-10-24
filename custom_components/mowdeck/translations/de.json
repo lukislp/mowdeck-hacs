@@ -231,6 +231,9 @@
       "mow_path_spacing": {
         "name": "Bahnabstand"
       },
+      "mow_obstacle_laps": {
+        "name": "Runden um Sperrzonen"
+      },
       "blade_threshold": {
         "name": "Erinnerung Messerwechsel",
         "state_attributes": {
@@ -268,6 +271,23 @@
           "checkerboard": "Schachbrett",
           "edge_only": "Nur Rand",
           "random_angle": "Zufälliger Winkel"
+        }
+      },
+      "mow_obstacle_detection": {
+        "name": "Hinderniserkennung",
+        "state": {
+          "off": "Aus",
+          "slow_touch": "Langsam bei Berührung",
+          "less_touch": "Weniger Berührungen",
+          "standard": "Standard",
+          "sensitive": "Empfindlich"
+        }
+      },
+      "mow_order": {
+        "name": "Bahnreihenfolge",
+        "state": {
+          "border_first": "Zuerst Rand",
+          "grid_first": "Zuerst Fläche"
         }
       },
       "setting_turn_style": {
@@ -1016,6 +1036,18 @@
     "no_map": {
       "message": "MowDeck hat noch keine Karte dieses Mähroboters."
     },
+    "start_parameter_unsupported": {
+      "message": "{mower} unterstützt {parameter} nicht. Lass es weg oder setze Nicht unterstützte Einstellungen ignorieren."
+    },
+    "start_parameter_invalid": {
+      "message": "{parameter} {value} passt nicht zu {mower}. Erlaubt: {allowed}."
+    },
+    "start_area_unknown": {
+      "message": "{mower} hat keinen Bereich {area}. Bereiche: {allowed}."
+    },
+    "start_no_area": {
+      "message": "Keiner der angegebenen Bereiche gehört zu {mower}."
+    },
     "spot_location": {
       "message": "Gib für den Punkt entweder Breiten- und Längengrad oder eine Zone an."
     },
@@ -1082,17 +1114,79 @@
   "services": {
     "start_mow": {
       "name": "Bereiche mähen",
-      "description": "Startet einen Mähauftrag für einen oder mehrere Kartenbereiche, optional mit Mustereinstellungen.",
+      "description": "Startet einen Mähauftrag mit den Einstellungen dieses Aufrufs. Jeder Mäher prüft die Einstellungen gegen das, was er kann (siehe Startoptionen abrufen); fehlende Einstellungen kommen aus den Mäh-Voreinstellungen des Mähers.",
       "fields": {
+        "areas": {
+          "name": "Bereiche",
+          "description": "Bereichsschalter, Bereichsnamen oder Bereichs-IDs des Mähers. Bei mehreren Mähern nimmt jeder seine eigenen Bereiche. Standard: die mit den Bereichsschaltern gewählten Bereiche."
+        },
         "area_ids": {
           "name": "Bereichs-IDs",
-          "description": "Kartenbereichs-IDs in Mähreihenfolge. Standard: der in der Bereichsauswahl gewählte Bereich oder alle Bereiche."
+          "description": "IDs der Kartenbereiche in Mähreihenfolge (das ältere Feld; Bereiche nimmt auch IDs)."
         },
         "pattern": {
           "name": "Muster",
-          "description": "Mustereinstellungen, von MowDeck gegen das JSON-Schema des Musters geprüft."
+          "description": "Das Mähmuster. Nur Muster, die der Mäher selbst fährt, werden angenommen."
+        },
+        "angle_deg": {
+          "name": "Winkel",
+          "description": "Grundwinkel der Bahnen, 0 bis 180 Grad."
+        },
+        "border_laps": {
+          "name": "Randrunden",
+          "description": "Runden entlang des Bereichsrands vor oder nach der Fläche, 0 bis 4."
+        },
+        "spacing_cm": {
+          "name": "Bahnabstand",
+          "description": "Abstand benachbarter Bahnen in cm, im Bereich des Mähers."
+        },
+        "blade_height_mm": {
+          "name": "Schnitthöhe",
+          "description": "Schnitthöhe in mm, im Bereich des Mähers. Wird vor dem Start gesetzt."
+        },
+        "speed_mps": {
+          "name": "Geschwindigkeit",
+          "description": "Fahrgeschwindigkeit beim Mähen in m/s, im Bereich des Mähers. Wird vor dem Start gesetzt."
+        },
+        "obstacle_detection": {
+          "name": "Hinderniserkennung",
+          "description": "Wie stark der Mäher Hindernissen ausweicht. Nur Modi, die der Mäher anbietet, werden angenommen."
+        },
+        "obstacle_laps": {
+          "name": "Runden um Sperrzonen",
+          "description": "Runden um jede Sperrzone, im Bereich des Mähers."
+        },
+        "order": {
+          "name": "Bahnreihenfolge",
+          "description": "Randrunden vor oder nach der Fläche."
+        },
+        "start_progress_pct": {
+          "name": "Start bei Fortschritt",
+          "description": "Den ersten Teil der Route überspringen und bei diesem Fortschritt in Prozent beginnen."
+        },
+        "ignore_unsupported": {
+          "name": "Nicht unterstützte Einstellungen ignorieren",
+          "description": "Einstellungen, die ein Mäher nicht kann, weglassen statt abzubrechen; die Antwort führt sie unter ignored auf."
+        }
+      },
+      "sections": {
+        "pattern_settings": {
+          "name": "Muster",
+          "description": "Muster, Winkel, Randrunden und Bahnabstand."
+        },
+        "cutting": {
+          "name": "Schnitthöhe und Geschwindigkeit",
+          "description": "Werden direkt vor dem Start an den Mäher gesendet."
+        },
+        "job_options": {
+          "name": "Auftragsoptionen",
+          "description": "Hinderniserkennung, Runden um Sperrzonen, Bahnreihenfolge und Startfortschritt, sofern der Mäher sie anbietet."
         }
       }
+    },
+    "get_start_options": {
+      "name": "Startoptionen abrufen",
+      "description": "Antwortet, was Bereiche mähen auf jedem Mäher annimmt: Parameter mit ihren Optionen oder Bereichen, die Bereiche, die gespeicherten Mäh-Voreinstellungen sowie aktuelle Schnitthöhe und Geschwindigkeit."
     },
     "emergency_stop": {
       "name": "Not-Aus",
@@ -1202,6 +1296,30 @@
         "critical": "Nur kritische",
         "warning": "Warnungen und kritische",
         "info": "Alle"
+      }
+    },
+    "mow_pattern": {
+      "options": {
+        "stripes": "Streifen",
+        "diagonal": "Diagonal",
+        "checkerboard": "Schachbrett",
+        "edge_only": "Nur Rand",
+        "random_angle": "Zufälliger Winkel"
+      }
+    },
+    "obstacle_detection": {
+      "options": {
+        "off": "Aus",
+        "slow_touch": "Langsam bei Berührung",
+        "less_touch": "Weniger Berührungen",
+        "standard": "Standard",
+        "sensitive": "Empfindlich"
+      }
+    },
+    "path_order": {
+      "options": {
+        "border_first": "Zuerst Rand",
+        "grid_first": "Zuerst Fläche"
       }
     }
   }

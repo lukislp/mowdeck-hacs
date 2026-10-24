@@ -839,7 +839,16 @@ class FakeMowDeck:
         body = await request.json()
         pattern = body["pattern"]
         if pattern is not None:
-            allowed = {"name", "angle_deg", "border_laps", "spacing_m"}
+            allowed = {
+                "name",
+                "angle_deg",
+                "border_laps",
+                "spacing_m",
+                "obstacle_detection",
+                "obstacle_laps",
+                "order",
+                "start_progress_pct",
+            }
             if set(pattern) - allowed or not 0 <= pattern.get("angle_deg", 0) <= 180:
                 return problem(422, "Unprocessable", "invalid pattern")
         mower["mow_defaults"] = {"pattern": pattern} if pattern is not None else None

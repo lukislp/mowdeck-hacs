@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import probatio as vol
 from homeassistant.components.lawn_mower import DOMAIN as LAWN_MOWER_DOMAIN
 from homeassistant.core import HomeAssistant, SupportsResponse, callback
@@ -9,12 +11,17 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import service
 
 from .const import (
+    API_ANGLE_MAX_DEG,
     API_BLADE_HEIGHT_MAX_MM,
     API_BLADE_HEIGHT_MIN_MM,
+    API_BORDER_LAPS_MAX,
+    API_SPACING_MAX_M,
+    API_SPACING_MIN_M,
     API_SPEED_MAX_MPS,
     DOMAIN,
     HEATMAP_CELLS,
     HEATMAP_LAYERS,
+    PATTERNS,
 )
 from .spot import PATTERNS as SPOT_PATTERNS
 from .spot import (
@@ -25,6 +32,13 @@ from .spot import (
     SPEED_MIN_MPS,
     TURN_STYLES,
 )
+from .start_options import (
+    API_OBSTACLE_LAPS_MAX,
+    API_START_PROGRESS_MAX_PCT,
+    CM_PER_M,
+    OBSTACLE_DETECTION,
+    PATH_ORDERS,
+)
 
 SERVICE_START_MOW = "start_mow"
 SERVICE_EMERGENCY_STOP = "emergency_stop"
@@ -33,6 +47,35 @@ SERVICE_SET_SPEED = "set_speed"
 SERVICE_GET_MAP = "get_map"
 SERVICE_GET_HEATMAP = "get_heatmap"
 SERVICE_SPOT_MOW = "spot_mow"
+SERVICE_GET_START_OPTIONS = "get_start_options"
+
+# The limits MowDeck's API puts on every mower; each mower's own options and ranges are checked
+# when the action runs (start_options.py), as the schema cannot know the targeted mowers.
+START_MOW_SCHEMA: dict[str | vol.Marker, Any] = {
+    vol.Optional("area_ids"): vol.All(cv.ensure_list, [cv.string]),
+    vol.Optional("areas"): vol.All(cv.ensure_list, [cv.string]),
+    # A pattern name, or (the older form, still accepted) a whole MowPattern object.
+    vol.Optional("pattern"): vol.Any(vol.In(PATTERNS), dict),
+    vol.Optional("angle_deg"): vol.All(vol.Coerce(float), vol.Range(0, API_ANGLE_MAX_DEG)),
+    vol.Optional("border_laps"): vol.All(vol.Coerce(int), vol.Range(0, API_BORDER_LAPS_MAX)),
+    vol.Optional("spacing_cm"): vol.All(
+        vol.Coerce(float),
+        vol.Range(API_SPACING_MIN_M * CM_PER_M, API_SPACING_MAX_M * CM_PER_M),
+    ),
+    vol.Optional("blade_height_mm"): vol.All(
+        vol.Coerce(int), vol.Range(API_BLADE_HEIGHT_MIN_MM, API_BLADE_HEIGHT_MAX_MM)
+    ),
+    vol.Optional("speed_mps"): vol.All(
+        vol.Coerce(float), vol.Range(min=0, max=API_SPEED_MAX_MPS, min_included=False)
+    ),
+    vol.Optional("obstacle_detection"): vol.In(OBSTACLE_DETECTION),
+    vol.Optional("obstacle_laps"): vol.All(vol.Coerce(int), vol.Range(0, API_OBSTACLE_LAPS_MAX)),
+    vol.Optional("order"): vol.In(PATH_ORDERS),
+    vol.Optional("start_progress_pct"): vol.All(
+        vol.Coerce(int), vol.Range(0, API_START_PROGRESS_MAX_PCT)
+    ),
+    vol.Optional("ignore_unsupported", default=False): cv.boolean,
+}
 
 
 @callback
@@ -43,11 +86,18 @@ def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_START_MOW,
         entity_domain=LAWN_MOWER_DOMAIN,
-        schema={
-            vol.Optional("area_ids"): vol.All(cv.ensure_list, [cv.string]),
-            vol.Optional("pattern"): dict,
-        },
+        schema=START_MOW_SCHEMA,
         func="async_start_mow",
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    service.async_register_platform_entity_service(
+        hass,
+        DOMAIN,
+        SERVICE_GET_START_OPTIONS,
+        entity_domain=LAWN_MOWER_DOMAIN,
+        schema=None,
+        func="async_get_start_options",
+        supports_response=SupportsResponse.ONLY,
     )
     service.async_register_platform_entity_service(
         hass,
