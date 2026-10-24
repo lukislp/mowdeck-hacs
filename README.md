@@ -28,7 +28,7 @@ In the MowDeck web app: **Settings, API tokens, New token**. Give it a name ("Ho
 | `mower.view` | required: mowers, states, map, live updates, the cameras, the health totals, **Check firmware now**. **Grant it on the whole account** to receive MowDeck notifications: only an account-wide `mower.view` implies `notifications.view`, which MowDeck needs to push the account's notifications to a token |
 | `mower.control` | start, pause, dock, end job, blade height, mowing speed, light (without it Home Assistant is read only; the emergency stop works for viewers too) |
 | `mower.drive` | optional: the manual drive speed setting (the number is disabled by default), **Start AI analysis** (Vision) and `mowdeck.spot_mow` (together with `mower.control`, which the Planner needs); also needed on a mower for its Vision notifications (`vision_proposal`, `vision_auto_proposal`) |
-| `fleet.manage` | optional: installing a firmware update from the update entity, **Blade changed**, the **Blade change reminder** number |
+| `fleet.manage` | optional: installing a firmware update from the update entity, **Blade changed**, the **Blade change reminder** number, the [mower's own settings](#mower-settings) |
 | `schedule.edit` | optional: the schedule switches and **Skip next run** buttons (together with `mower.control`, which **Run now** needs alone). Seeing schedules, the next mowing, the last run and the rain decision only needs `mower.view` (`scheduler.view` follows it) |
 
 The integration asks MowDeck which of these the token holds on each mower (`POST /api/v1/identity/me/permissions`, every 10 minutes) and only creates entities whose action the token may run; a MowDeck that cannot answer that question hides nothing, and a refused action names the missing permission.
@@ -159,10 +159,32 @@ Per mower one device (manufacturer Mammotion, model from the capabilities, firmw
 | Coverage heatmap, RTK heatmap, Wi-Fi heatmap, Mobile network heatmap | `image.luba_coverage_heatmap`, `image.luba_rtk_heatmap`, `image.luba_wi_fi_heatmap`, `image.luba_mobile_network_heatmap` | a heatmap layer of the last 7 days as SVG; disabled by default (only an enabled one is read from MowDeck); attributes `from`, `to`, `cell_m`, `legend` (`ratio`, `fix`, `dbm`), `legend_min`, `legend_max`, `samples`, `truncated` |
 | Missed area | `sensor.luba_missed_area` | the area the blades missed in the last 7 days: the sum of the coverage layer's missed spots (`gaps[].area_m2`) in m², attributes `spots`, `from`, `to`; refreshed every 30 minutes |
 | Camera light | `switch.luba_camera_light` | the camera's headlamp: `light_on` of the state (unknown while not reported), `set_light`; only for mowers whose capabilities have `light` |
+| Mower settings | `switch.luba_rain_detection`, `number.luba_voice_volume`, `select.luba_turning_style`, `time.luba_non_working_hours_start`, ... | the mower's own settings as its connection declares them (see [Mower settings](#mower-settings)); configuration entities, need `fleet.manage` |
+| Rain | `binary_sensor.luba_rain` | the mower's own rain sensor (`rain_detected`, device class moisture): on while it reports rain. **Only reported while the mower's rain detection is on**; otherwise (and with connections that do not report the sensor) unavailable |
 
 **Start mowing** resumes a paused job; otherwise it starts the selected areas (area switches / Area select) in map order, with the mower's mowing defaults as pattern once they are saved in MowDeck (until then the mower's own defaults). With every area switch off, starting is refused.
 
 The event `mowdeck_command_result` carries every command status change (`mower_id`, `command_id`, `status`, `reason`); the entity `event.luba_command` fires with the status as event type (`pending`, `accepted`, `rejected`, `executed`, `expired`, `failed`) and `command_id` and `reason` as attributes.
+
+## Mower settings
+
+MowDeck reads and changes some of the mower's own settings (the ones the vendor app keeps on the mower), as far as the mower's connection supports them (MowDeck 0.11). The connection declares each setting with its type and range or options (`MowerCapabilities.settings`), the mower reports the values (`MowerState.settings`), and the integration creates one configuration entity per declared setting:
+
+| Type | Entities | Sends |
+| --- | --- | --- |
+| on/off | a switch | `set_setting` with `true` / `false` |
+| number | a number with the declared range, step and unit | a whole number |
+| option | a select with the declared options | the option |
+| daily time window | two time entities (start, end) and a button **Turn off ...** | `{"start": "HH:MM", "end": "HH:MM"}` in the mower's local time (an end before the start crosses midnight); the button sends `null` |
+
+For a LUBA 2 (AWD) these are: **Rain detection**, **Turning style** (turn in place, multi-point turn), **Route between areas** (direct, along the perimeter), **Side lights**, **Night light** (models with a fill light), **Wildlife protection** (off, stop mowing, mow slowly; firmware that supports it), **Voice prompts**, **Voice volume** (0 to 100 %), **Voice** (male, female), **Non-working hours**, and from firmware 2.1.1.5 on **Return to charge at** (15 to 30 %), **Smart return level**, **Resume mowing at** (40 to 100 %) and **Smart resume level**. A setting MowDeck knows no name for shows as "Setting *key*".
+
+- The entities follow the declaration: a setting the mower no longer declares (other firmware, other connection) disappears with its entities. A value the mower has not reported yet is unknown; after a change the new value shows once the mower reports it.
+- Changing a setting needs `fleet.manage` on the mower (`can_manage_mowers`, like a firmware update) and the plan feature `control`; without it the entities are not created. The mower's controller checks the value against the declaration; a refused change raises an error with MowDeck's reason (see below).
+- While the non-working hours are off, setting their start or end switches them on with the other bound from the last window seen (else one hour apart). Start and end must differ.
+- A setting never makes the mower move.
+
+**Refused commands.** Fleet accepts a command before the mower's controller checks it against the mower's state. For the settings the integration waits up to 10 s for the controller's verdict over the Realtime WebSocket and raises an error that names MowDeck's reason when the command is refused (`rejected`, `failed` or `expired`). Without a connected WebSocket, or without a verdict in time, the command counts as sent; `event.luba_command` still shows what became of it.
 
 ## Map and heatmaps
 

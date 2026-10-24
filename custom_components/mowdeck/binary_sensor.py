@@ -1,4 +1,5 @@
-"""Binary sensors of a MowDeck mower: charging, online, error and the Scheduler's rain hold."""
+"""Binary sensors of a MowDeck mower: charging, online, error, the mower's own rain sensor and
+the Scheduler's rain hold."""
 
 from __future__ import annotations
 
@@ -79,6 +80,14 @@ async def async_setup_entry(
         async_add_entities,
         lambda coordinator, m: [MowDeckBinarySensor(coordinator, m, d) for d in BINARY_SENSORS],
     )
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        lambda coordinator, m: (
+            [RainSensor(coordinator, m)] if has_rain_sensor(coordinator, m) else []
+        ),
+        fingerprint=lambda m: has_rain_sensor(entry.runtime_data.coordinator, m),
+    )
     scheduler = entry.runtime_data.scheduler
     async_add_mower_entities(
         entry,
@@ -154,3 +163,41 @@ class RainHoldBinarySensor(MowDeckEntity, BinarySensorEntity):
             "provider": decision.get("provider"),
             "attribution": decision.get("attribution"),
         }
+
+
+def has_rain_sensor(coordinator: MowDeckCoordinator, mower_id: str) -> bool:
+    """The mower declares the rain detection setting or reports its rain sensor."""
+    caps = coordinator.data.capabilities.get(mower_id) or {}
+    declared = any(
+        isinstance(spec, dict) and spec.get("key") == "rain_detection"
+        for spec in caps.get("settings") or []
+    )
+    state = coordinator.state(mower_id) or {}
+    return declared or isinstance(state.get("rain_detected"), bool)
+
+
+class RainSensor(MowDeckEntity, BinarySensorEntity):
+    """The mower's own rain sensor (``MowerState.rain_detected``): on while it reports rain.
+
+    The mower only reports the sensor while its rain detection is on (the setting
+    ``rain_detection``); otherwise, and with connections that do not report it, the entity is
+    unavailable. Created once the mower declares rain detection or reports the sensor."""
+
+    entity_description = BinarySensorEntityDescription(
+        key="rain_detected", device_class=BinarySensorDeviceClass.MOISTURE
+    )
+
+    def __init__(self, coordinator: MowDeckCoordinator, mower_id: str) -> None:
+        """Create the binary sensor."""
+        super().__init__(coordinator, mower_id, "rain_detected")
+
+    @property
+    def available(self) -> bool:
+        """Available while the mower reports the sensor."""
+        return super().available and isinstance(self.mower_state.get("rain_detected"), bool)
+
+    @property
+    def is_on(self) -> bool | None:
+        """Rain right now."""
+        value = self.mower_state.get("rain_detected")
+        return value if isinstance(value, bool) else None

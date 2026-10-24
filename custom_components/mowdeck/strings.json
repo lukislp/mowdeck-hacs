@@ -76,6 +76,9 @@
       "error": {
         "name": "Error"
       },
+      "rain_detected": {
+        "name": "Rain"
+      },
       "rain_hold": {
         "name": "Rain hold",
         "state_attributes": {
@@ -114,6 +117,12 @@
     "button": {
       "emergency_stop": {
         "name": "Emergency stop"
+      },
+      "setting_non_work_hours_clear": {
+        "name": "Turn off non-working hours"
+      },
+      "setting_other_clear": {
+        "name": "Turn off setting {setting}"
       },
       "return_to_dock": {
         "name": "Return to dock"
@@ -196,6 +205,18 @@
             "name": "Set for this mower"
           }
         }
+      },
+      "setting_voice_volume": {
+        "name": "Voice volume"
+      },
+      "setting_recharge_level": {
+        "name": "Return to charge at"
+      },
+      "setting_resume_level": {
+        "name": "Resume mowing at"
+      },
+      "setting_other": {
+        "name": "Setting {setting}"
       }
     },
     "select": {
@@ -215,6 +236,38 @@
           "edge_only": "Edge only",
           "random_angle": "Random angle"
         }
+      },
+      "setting_turn_style": {
+        "name": "Turning style",
+        "state": {
+          "in_place": "Turn in place",
+          "multi_point": "Multi-point turn"
+        }
+      },
+      "setting_traversal_mode": {
+        "name": "Route between areas",
+        "state": {
+          "direct": "Direct",
+          "follow_perimeter": "Along the perimeter"
+        }
+      },
+      "setting_wildlife_safety": {
+        "name": "Wildlife protection",
+        "state": {
+          "off": "Off",
+          "stop_mowing": "Stop mowing",
+          "low_speed_mowing": "Mow slowly"
+        }
+      },
+      "setting_voice_gender": {
+        "name": "Voice",
+        "state": {
+          "man": "Male",
+          "woman": "Female"
+        }
+      },
+      "setting_other": {
+        "name": "Setting {setting}"
       }
     },
     "sensor": {
@@ -587,6 +640,41 @@
       },
       "area": {
         "name": "Mow {area}"
+      },
+      "setting_rain_detection": {
+        "name": "Rain detection"
+      },
+      "setting_side_led": {
+        "name": "Side lights"
+      },
+      "setting_night_light": {
+        "name": "Night light"
+      },
+      "setting_voice_enabled": {
+        "name": "Voice prompts"
+      },
+      "setting_smart_recharge_level": {
+        "name": "Smart return level"
+      },
+      "setting_smart_resume_level": {
+        "name": "Smart resume level"
+      },
+      "setting_other": {
+        "name": "Setting {setting}"
+      }
+    },
+    "time": {
+      "setting_non_work_hours_start": {
+        "name": "Non-working hours start"
+      },
+      "setting_non_work_hours_end": {
+        "name": "Non-working hours end"
+      },
+      "setting_other_start": {
+        "name": "Setting {setting} start"
+      },
+      "setting_other_end": {
+        "name": "Setting {setting} end"
       }
     },
     "update": {
@@ -836,6 +924,9 @@
     "command_forbidden": {
       "message": "The API token may not send {command}. Grant {permission} to the token in the MowDeck app."
     },
+    "command_refused": {
+      "message": "The mower refused {command} ({status}): {reason}"
+    },
     "camera_relay_unsupported": {
       "message": "MowDeck's camera relay cannot serve this mower. Enable the camera relay (and for Mammotion mowers the Agora bridge) in MowDeck"
     },
@@ -913,6 +1004,9 @@
     },
     "spot_no_route": {
       "message": "MowDeck found no way to the spot: {reason}"
+    },
+    "time_window_empty": {
+      "message": "Start and end of the window are both {time}. Choose a different start or end, or turn the window off with its button."
     }
   },
   "issues": {
