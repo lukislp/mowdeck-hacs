@@ -231,6 +231,9 @@
       "mow_path_spacing": {
         "name": "Path spacing"
       },
+      "mow_obstacle_laps": {
+        "name": "Laps around no-go zones"
+      },
       "blade_threshold": {
         "name": "Blade change reminder",
         "state_attributes": {
@@ -268,6 +271,23 @@
           "checkerboard": "Checkerboard",
           "edge_only": "Edge only",
           "random_angle": "Random angle"
+        }
+      },
+      "mow_obstacle_detection": {
+        "name": "Obstacle detection",
+        "state": {
+          "off": "Off",
+          "slow_touch": "Slow on touch",
+          "less_touch": "Fewer touches",
+          "standard": "Standard",
+          "sensitive": "Sensitive"
+        }
+      },
+      "mow_order": {
+        "name": "Path order",
+        "state": {
+          "border_first": "Border first",
+          "grid_first": "Fill first"
         }
       },
       "setting_turn_style": {
@@ -1016,6 +1036,18 @@
     "no_map": {
       "message": "MowDeck has no map of this mower yet."
     },
+    "start_parameter_unsupported": {
+      "message": "{mower} does not support {parameter}. Leave it out, or set ignore unsupported."
+    },
+    "start_parameter_invalid": {
+      "message": "{parameter} {value} does not fit {mower}. Allowed: {allowed}."
+    },
+    "start_area_unknown": {
+      "message": "{mower} has no area {area}. Areas: {allowed}."
+    },
+    "start_no_area": {
+      "message": "None of the given areas belongs to {mower}."
+    },
     "spot_location": {
       "message": "Give either latitude and longitude or a zone for the spot."
     },
@@ -1082,17 +1114,79 @@
   "services": {
     "start_mow": {
       "name": "Start mowing areas",
-      "description": "Starts a mowing job on one or more map areas, optionally with pattern settings.",
+      "description": "Starts a mowing job with the settings of this call. Each mower checks the settings against what it supports (see Get start options); settings left out come from the mower's mowing defaults.",
       "fields": {
+        "areas": {
+          "name": "Areas",
+          "description": "Area switches, area names or area ids of the mower. With several mowers each takes its own areas. Default: the areas selected with the area switches."
+        },
         "area_ids": {
           "name": "Area IDs",
-          "description": "Map area ids in mowing order. Default: the area chosen in the Area select, or all areas."
+          "description": "Map area ids in mowing order (the older field; Areas also takes ids)."
         },
         "pattern": {
           "name": "Pattern",
-          "description": "Pattern settings, validated by MowDeck against the pattern's JSON Schema."
+          "description": "The mowing pattern. Only the patterns the mower runs itself are accepted."
+        },
+        "angle_deg": {
+          "name": "Angle",
+          "description": "Base angle of the stripes, 0 to 180 degrees."
+        },
+        "border_laps": {
+          "name": "Border laps",
+          "description": "Laps along the area edge before or after the fill, 0 to 4."
+        },
+        "spacing_cm": {
+          "name": "Path spacing",
+          "description": "Distance between neighbouring paths in cm, within the mower's range."
+        },
+        "blade_height_mm": {
+          "name": "Blade height",
+          "description": "Cutting height in mm, within the mower's range. Set before the start."
+        },
+        "speed_mps": {
+          "name": "Speed",
+          "description": "Driving speed while mowing in m/s, within the mower's range. Set before the start."
+        },
+        "obstacle_detection": {
+          "name": "Obstacle detection",
+          "description": "How eagerly the mower avoids obstacles. Only the modes the mower offers are accepted."
+        },
+        "obstacle_laps": {
+          "name": "Laps around no-go zones",
+          "description": "Laps around each no-go zone, within the mower's range."
+        },
+        "order": {
+          "name": "Path order",
+          "description": "Border laps before or after the fill."
+        },
+        "start_progress_pct": {
+          "name": "Start at progress",
+          "description": "Skip the first part of the route and start at this progress in percent."
+        },
+        "ignore_unsupported": {
+          "name": "Ignore unsupported settings",
+          "description": "Leave out settings a mower does not support instead of failing; the answer lists them under ignored."
+        }
+      },
+      "sections": {
+        "pattern_settings": {
+          "name": "Pattern",
+          "description": "Pattern, angle, border laps and path spacing."
+        },
+        "cutting": {
+          "name": "Blade height and speed",
+          "description": "Sent to the mower right before the start."
+        },
+        "job_options": {
+          "name": "Job options",
+          "description": "Obstacle detection, laps around no-go zones, path order and start progress, where the mower offers them."
         }
       }
+    },
+    "get_start_options": {
+      "name": "Get start options",
+      "description": "Answers what Start mowing areas accepts on each mower: parameters with their options or ranges, the areas, the saved mowing defaults and the current blade height and speed."
     },
     "emergency_stop": {
       "name": "Emergency stop",
@@ -1202,6 +1296,30 @@
         "critical": "Critical only",
         "warning": "Warnings and critical",
         "info": "All"
+      }
+    },
+    "mow_pattern": {
+      "options": {
+        "stripes": "Stripes",
+        "diagonal": "Diagonal",
+        "checkerboard": "Checkerboard",
+        "edge_only": "Edge only",
+        "random_angle": "Random angle"
+      }
+    },
+    "obstacle_detection": {
+      "options": {
+        "off": "Off",
+        "slow_touch": "Slow on touch",
+        "less_touch": "Fewer touches",
+        "standard": "Standard",
+        "sensitive": "Sensitive"
+      }
+    },
+    "path_order": {
+      "options": {
+        "border_first": "Border first",
+        "grid_first": "Fill first"
       }
     }
   }

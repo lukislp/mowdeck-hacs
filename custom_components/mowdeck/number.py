@@ -1,6 +1,6 @@
 """Numbers of a MowDeck mower: blade height, mowing speed, the manual-drive speed setting, the
-angle, border laps and path spacing of the mowing defaults, MowDeck's blade change reminder
-and one per numeric setting the mower declares (``settings.py``).
+angle, border laps, path spacing and laps around no-go zones of the mowing defaults, MowDeck's
+blade change reminder and one per numeric setting the mower declares (``settings.py``).
 
 Ranges come from the mower's capabilities, limited to what the Fleet command API accepts.
 Speeds are read, shown and sent with two decimals (``SPEED_DECIMALS``).
@@ -29,22 +29,27 @@ from homeassistant.core import HomeAssistant
 
 from .const import (
     API_ANGLE_MAX_DEG,
-    API_BLADE_HEIGHT_MAX_MM,
-    API_BLADE_HEIGHT_MIN_MM,
     API_BORDER_LAPS_MAX,
     API_DRIVE_SPEED_MAX_MPS,
     API_SPACING_MAX_M,
     API_SPACING_MIN_M,
-    API_SPEED_MAX_MPS,
     CAN_CONTROL,
     CAN_MANAGE_MOWERS,
-    DEFAULT_MIN_SPEED_MPS,
-    SPEED_DECIMALS,
     SPEED_STEP_MPS,
 )
 from .entity import MowDeckEntity, async_add_mower_entities
-from .select import async_save_mow_defaults, native_patterns
+from .select import async_save_mow_defaults
 from .settings import SettingEntity, setting_entities
+from .start_options import (
+    API_OBSTACLE_LAPS_MAX,
+    CM_PER_M,
+    blade_height_range,
+    declared_range,
+    native_patterns,
+    speed_range,
+)
+from .start_options import spacing_range_cm as _spacing_range
+from .start_options import speed as _speed
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -59,13 +64,6 @@ PARALLEL_UPDATES = 1
 BLADE_THRESHOLD_MAX_HOURS = 10_000
 # DriveSpeedSetting.step_mps when the capabilities name none.
 DEFAULT_DRIVE_STEP_MPS = 0.1
-
-
-def _speed(value: Any) -> float | None:
-    """A speed in m/s with two decimals; None for anything that is not a number."""
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    return round(float(value), SPEED_DECIMALS)
 
 
 async def async_setup_entry(
@@ -90,6 +88,8 @@ async def async_setup_entry(
             ]
             if _spacing_range(caps) is not None:
                 numbers.append(PathSpacingNumber(coordinator, mower_id))
+        if obstacle_laps_range(caps) is not None and coordinator.permitted(mower_id, CAN_CONTROL):
+            numbers.append(ObstacleLapsNumber(coordinator, mower_id))
         return numbers
 
     async_add_mower_entities(entry, async_add_entities, entities)
@@ -132,13 +132,7 @@ class BladeHeightNumber(MowDeckEntity, NumberEntity):
         super().__init__(coordinator, mower_id, "blade_height")
 
     def _range(self) -> tuple[int, int]:
-        bounds = self.capabilities.get("blade_height_range_mm")
-        if isinstance(bounds, list | tuple) and len(bounds) == 2:
-            low = max(API_BLADE_HEIGHT_MIN_MM, int(bounds[0]))
-            high = min(API_BLADE_HEIGHT_MAX_MM, int(bounds[1]))
-            if low <= high:
-                return low, high
-        return API_BLADE_HEIGHT_MIN_MM, API_BLADE_HEIGHT_MAX_MM
+        return blade_height_range(self.capabilities)
 
     @property
     def native_min_value(self) -> float:
@@ -180,11 +174,7 @@ class SpeedNumber(MowDeckEntity, NumberEntity):
         super().__init__(coordinator, mower_id, "speed")
 
     def _range(self) -> tuple[float, float]:
-        top = _speed(self.capabilities.get("max_speed_mps"))
-        high = min(top, API_SPEED_MAX_MPS) if top is not None and top > 0 else API_SPEED_MAX_MPS
-        bottom = _speed(self.capabilities.get("min_speed_mps"))
-        low = bottom if bottom is not None and 0 < bottom <= high else DEFAULT_MIN_SPEED_MPS
-        return min(low, high), high
+        return speed_range(self.capabilities)
 
     @property
     def native_min_value(self) -> float:
@@ -258,20 +248,6 @@ class DriveSpeedNumber(MowDeckEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Send ``set_drive_speed`` with two decimals."""
         await self.async_send_command({"kind": "set_drive_speed", "speed_mps": _speed(value)})
-
-
-# Path spacing in centimetres, the unit people set it in; MowDeck stores metres.
-CM_PER_M = 100
-
-
-def _spacing_range(caps: dict[str, Any]) -> tuple[float, float] | None:
-    """The model's path spacing range in cm, within MowDeck's limits; None when not settable."""
-    bounds = caps.get("path_spacing_range_mm")
-    if not isinstance(bounds, list | tuple) or len(bounds) != 2:
-        return None
-    low = max(API_SPACING_MIN_M * CM_PER_M, float(bounds[0]) / 10)
-    high = min(API_SPACING_MAX_M * CM_PER_M, float(bounds[1]) / 10)
-    return (low, high) if low <= high else None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -375,6 +351,54 @@ class PathSpacingNumber(MowDeckEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Save the spacing (in metres) into the mowing defaults."""
         await async_save_mow_defaults(self, {"spacing_m": round(value / CM_PER_M, 3)})
+
+
+def obstacle_laps_range(caps: dict[str, Any]) -> tuple[int, int] | None:
+    """The laps around no-go zones the mower declares (``start_options.obstacle_laps_range``),
+    None when they are not settable."""
+    return declared_range(caps, "obstacle_laps_range", API_OBSTACLE_LAPS_MAX)
+
+
+class ObstacleLapsNumber(MowDeckEntity, NumberEntity):
+    """The laps around each no-go zone of the mowing defaults (``mower.control``), within the
+    range the mower declares; unknown while the mower's own default applies. Kept,
+    unavailable, while the mower no longer declares the range."""
+
+    entity_description = NumberEntityDescription(
+        key="mow_obstacle_laps",
+        native_step=1,
+        mode=NumberMode.BOX,
+        entity_category=EntityCategory.CONFIG,
+    )
+
+    def __init__(self, coordinator: MowDeckCoordinator, mower_id: str) -> None:
+        """Create the number."""
+        super().__init__(coordinator, mower_id, "mow_obstacle_laps")
+
+    def _range(self) -> tuple[int, int]:
+        return obstacle_laps_range(self.capabilities) or (0, API_OBSTACLE_LAPS_MAX)
+
+    @property
+    def native_min_value(self) -> float:
+        """Fewest laps the mower takes."""
+        return self._range()[0]
+
+    @property
+    def native_max_value(self) -> float:
+        """Most laps the mower takes."""
+        return self._range()[1]
+
+    @property
+    def native_value(self) -> float | None:
+        """The saved laps."""
+        value = self.coordinator.mow_pattern(self.mower_id).get("obstacle_laps")
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            return None
+        return float(value)
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Save the laps into the mowing defaults."""
+        await async_save_mow_defaults(self, {"obstacle_laps": round(value)})
 
 
 def blade_threshold_settable(health: HealthCoordinator, mower_id: str) -> bool:

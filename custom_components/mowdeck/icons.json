@@ -68,6 +68,7 @@
       "mow_angle": { "default": "mdi:angle-acute" },
       "mow_border_laps": { "default": "mdi:vector-square" },
       "mow_path_spacing": { "default": "mdi:arrow-expand-horizontal" },
+      "mow_obstacle_laps": { "default": "mdi:rotate-orbit" },
       "blade_threshold": { "default": "mdi:saw-blade" },
       "setting_voice_volume": { "default": "mdi:volume-high" },
       "setting_recharge_level": { "default": "mdi:battery-arrow-down-outline" },
@@ -77,6 +78,8 @@
     "select": {
       "area": { "default": "mdi:texture-box" },
       "mow_pattern": { "default": "mdi:texture" },
+      "mow_obstacle_detection": { "default": "mdi:eye-outline" },
+      "mow_order": { "default": "mdi:sort" },
       "setting_turn_style": { "default": "mdi:rotate-right" },
       "setting_traversal_mode": { "default": "mdi:map-marker-path" },
       "setting_wildlife_safety": { "default": "mdi:paw" },
@@ -126,7 +129,15 @@
     }
   },
   "services": {
-    "start_mow": { "service": "mdi:play" },
+    "start_mow": {
+      "service": "mdi:play",
+      "sections": {
+        "pattern_settings": "mdi:texture",
+        "cutting": "mdi:arrow-expand-vertical",
+        "job_options": "mdi:tune-variant"
+      }
+    },
+    "get_start_options": { "service": "mdi:format-list-checks" },
     "emergency_stop": { "service": "mdi:alert-octagon" },
     "set_blade_height": { "service": "mdi:arrow-expand-vertical" },
     "set_speed": { "service": "mdi:speedometer" },
