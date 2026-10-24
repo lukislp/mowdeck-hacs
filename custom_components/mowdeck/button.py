@@ -25,6 +25,7 @@ from .const import (
     DEFAULT_EXPOSE_EMERGENCY_STOP,
 )
 from .entity import MowDeckEntity, ScheduleEntity, async_add_mower_entities
+from .number import blade_threshold_settable
 from .settings import SettingEntity, setting_entities
 
 if TYPE_CHECKING:
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
 
     from . import MowDeckConfigEntry
     from .coordinator import MowDeckCoordinator
+    from .health import HealthCoordinator
     from .scheduler import SchedulerCoordinator
     from .vision import VisionCoordinator
 
@@ -80,6 +82,22 @@ async def async_setup_entry(
 
     async_add_mower_entities(entry, async_add_entities, entities)
     async_add_mower_entities(entry, async_add_entities, maintenance_buttons)
+
+    health = entry.runtime_data.health
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        lambda c, m: (
+            [BladeThresholdResetButton(c, m, health)]
+            if blade_threshold_settable(health, m) and c.permitted(m, CAN_MANAGE_MOWERS)
+            else []
+        ),
+        fingerprint=lambda m: (
+            entry.runtime_data.coordinator.fingerprint(m),
+            blade_threshold_settable(health, m),
+        ),
+        listen=[health],
+    )
 
     vision = entry.runtime_data.vision
     async_add_mower_entities(
@@ -318,6 +336,33 @@ class BladeChangedButton(MowDeckEntity, ButtonEntity):
         """Record the change; the health totals of the answer show at once."""
         totals = await self.async_call_api(
             self.coordinator.client.reset_blade(self.mower_id), "blade_changed", "fleet.manage"
+        )
+        self._health.async_set_totals(self.mower_id, totals)
+
+
+class BladeThresholdResetButton(MowDeckEntity, ButtonEntity):
+    """Drops the blade change reminder set in MowDeck (``PUT .../health/blade-threshold``
+    with null, ``fleet.manage``): the reminder follows the mower's own warning again, or
+    MowDeck's default when the mower has none. Next to the blade change reminder number."""
+
+    entity_description = ButtonEntityDescription(
+        key="blade_threshold_reset",
+        entity_category=EntityCategory.CONFIG,
+    )
+
+    def __init__(
+        self, coordinator: MowDeckCoordinator, mower_id: str, health: HealthCoordinator
+    ) -> None:
+        """Create the button."""
+        super().__init__(coordinator, mower_id, "blade_threshold_reset", service=health)
+        self._health = health
+
+    async def async_press(self) -> None:
+        """Drop the threshold; the health totals of the answer show at once."""
+        totals = await self.async_call_api(
+            self.coordinator.client.set_blade_threshold(self.mower_id, None),
+            "blade_threshold",
+            "fleet.manage",
         )
         self._health.async_set_totals(self.mower_id, totals)
 

@@ -38,6 +38,7 @@ from .const import (
     SPEED_STEP_MPS,
 )
 from .entity import MowDeckEntity, async_add_mower_entities
+from .health import blade_threshold
 from .select import async_save_mow_defaults
 from .settings import SettingEntity, setting_entities
 from .start_options import (
@@ -408,10 +409,12 @@ def blade_threshold_settable(health: HealthCoordinator, mower_id: str) -> bool:
 
 
 class BladeThresholdNumber(MowDeckEntity, NumberEntity):
-    """MowDeck's blade change reminder: the blade hours since the change after which MowDeck
-    notifies (``PUT .../health/blade-threshold``, ``fleet.manage``). It concerns MowDeck's own
-    count; the mower's own warning (``device_blade_warn_hours``) stays as set in the vendor
-    app."""
+    """The blade change reminder: the one threshold in effect (MowDeck's
+    ``blade_hours_threshold_effective``: set in MowDeck, else the mower's own warning, else
+    MowDeck's default), the same as the ``threshold`` of the blade hours sensor. Setting it sets
+    the mower's own threshold in MowDeck (``PUT .../health/blade-threshold``, ``fleet.manage``);
+    the button "Blade change reminder: follow the mower" drops it again. The warning stored on
+    the mower itself stays as set in the vendor app."""
 
     entity_description = NumberEntityDescription(
         key="blade_threshold",
@@ -433,15 +436,20 @@ class BladeThresholdNumber(MowDeckEntity, NumberEntity):
 
     @property
     def native_value(self) -> float | None:
-        """The threshold in effect (the mower's own, else MowDeck's default)."""
-        value = (self._health.data.totals.get(self.mower_id) or {}).get("blade_hours_threshold")
+        """The threshold in effect (set in MowDeck, else the mower's own warning, else
+        MowDeck's default)."""
+        value, _ = blade_threshold(self._health.data.totals.get(self.mower_id) or {})
         return float(value) if isinstance(value, int | float) else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Whether the mower has its own threshold or MowDeck's default applies."""
+        """Whether the threshold was set in MowDeck, and where the one in effect comes from
+        (``custom``, ``device`` or ``default``)."""
         totals = self._health.data.totals.get(self.mower_id) or {}
-        return {"custom": bool(totals.get("blade_hours_threshold_custom"))}
+        return {
+            "custom": bool(totals.get("blade_hours_threshold_custom")),
+            "source": blade_threshold(totals)[1],
+        }
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the mower's own threshold; the health totals of the answer show at once."""

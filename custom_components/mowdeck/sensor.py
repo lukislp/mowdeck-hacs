@@ -41,6 +41,7 @@ from .const import (
     SPEED_DECIMALS,
 )
 from .entity import MowDeckEntity, async_add_mower_entities
+from .health import blade_threshold
 from .heatmap import COVERAGE, missed_area
 from .scheduler import parse_time
 from .spot import RUN_STATES
@@ -205,13 +206,35 @@ def _today(key: str) -> Callable[[MowerData], Any]:
 
 
 def _blade_attributes(health: dict[str, Any]) -> dict[str, Any]:
-    """The reminder threshold of the counter shown (the mower's own warning or MowDeck's
-    threshold) and when MowDeck last recorded a blade change."""
-    device = health.get("blade_source") == "device"
-    threshold = health.get("device_blade_warn_hours") if device else None
-    if threshold is None:
-        threshold = health.get("blade_hours_threshold")
-    return {"threshold": threshold, "changed_at": health.get("blade_changed_at")}
+    """The one reminder threshold in effect (the same as the blade change reminder number),
+    where it comes from, and when MowDeck last recorded a blade change."""
+    threshold, source = blade_threshold(health)
+    return {
+        "threshold": threshold,
+        "threshold_source": source,
+        "changed_at": health.get("blade_changed_at"),
+    }
+
+
+def _lifetime(device_key: str, tracked_key: str) -> Callable[[MowerData], Any]:
+    """A lifetime total: the mower's own counter when it reports one, MowDeck's own count
+    (since it started tracking) otherwise."""
+
+    def read(data: MowerData) -> Any:
+        device = data.health.get(device_key)
+        return device if device is not None else data.health.get(tracked_key)
+
+    return read
+
+
+def _lifetime_attributes(device_key: str) -> Callable[[MowerData], dict[str, Any]]:
+    """Where a lifetime total comes from: ``device`` (the mower's own counter, as the vendor
+    app shows it) or ``telemetry`` (MowDeck's own count)."""
+
+    def read(data: MowerData) -> dict[str, Any]:
+        return {"source": "device" if data.health.get(device_key) is not None else "telemetry"}
+
+    return read
 
 
 def _bridge_rssi(data: MowerData) -> Any:
@@ -429,7 +452,8 @@ SENSORS: tuple[MowDeckSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfTime.HOURS,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=1,
-        value_fn=_number(lambda d: d.health.get("mowing_hours"), 2),
+        value_fn=_number(_lifetime("device_mowing_hours", "mowing_hours"), 2),
+        attributes_fn=_lifetime_attributes("device_mowing_hours"),
         health=True,
     ),
     MowDeckSensorDescription(
@@ -439,6 +463,32 @@ SENSORS: tuple[MowDeckSensorDescription, ...] = (
         suggested_unit_of_measurement=UnitOfLength.KILOMETERS,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
+        value_fn=_number(_lifetime("device_distance_m", "distance_m")),
+        attributes_fn=_lifetime_attributes("device_distance_m"),
+        health=True,
+    ),
+    # MowDeck's own counts since it started tracking the mower (the totals above show the
+    # mower's lifetime values when it reports them).
+    MowDeckSensorDescription(
+        key="mowing_hours_mowdeck",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.HOURS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=1,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=_number(lambda d: d.health.get("mowing_hours"), 2),
+        health=True,
+    ),
+    MowDeckSensorDescription(
+        key="mowing_distance_mowdeck",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.METERS,
+        suggested_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=_number(lambda d: d.health.get("distance_m")),
         health=True,
     ),
