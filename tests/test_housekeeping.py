@@ -8,7 +8,12 @@ from typing import Any
 import pytest
 from homeassistant.components.button import SERVICE_PRESS
 from homeassistant.components.lawn_mower import SERVICE_STOP, LawnMowerEntityFeature
-from homeassistant.const import ATTR_ENTITY_ID, ATTR_SUPPORTED_FEATURES, CONF_URL
+from homeassistant.const import (
+    ATTR_ENTITY_ID,
+    ATTR_SUPPORTED_FEATURES,
+    CONF_URL,
+    STATE_UNAVAILABLE,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import HomeAssistantError
@@ -28,6 +33,7 @@ MOWER = "lawn_mower.luba"
 FIRMWARE = "update.luba_firmware"
 FIRMWARE_CHECK = "button.luba_check_firmware_now"
 BLADE_CHANGED = "button.luba_blade_changed"
+LIGHT = "switch.luba_camera_light"
 
 
 def sent(fake_api: FakeMowDeck) -> list[dict[str, Any]]:
@@ -155,26 +161,59 @@ async def test_firmware_check(
     assert "firmware-check-unsupported" in str(err.value.translation_placeholders)
 
 
-async def test_capability_loss_removes_entities(
+async def test_capability_loss_keeps_entities(
     hass: HomeAssistant,
     fake_api: FakeMowDeck,
     loaded_entry: MockConfigEntry,
     entity_registry: er.EntityRegistry,
 ) -> None:
-    """Entities follow the capabilities: a lost capability removes them from the registry."""
+    """A lost capability leaves its entities registered and unavailable, with the owner's
+    changes; when it returns they are available again under the same entity ids."""
     fake_api.capabilities[MOWER_ID]["firmware_update"] = True
     await refresh_static(loaded_entry)
     await hass.async_block_till_done()
     assert entity_registry.async_get(FIRMWARE) is not None
-    assert hass.states.get("switch.luba_camera_light") is not None
+    assert hass.states.get(LIGHT) is not None
+    entity_registry.async_update_entity(LIGHT, name="Headlight", icon="mdi:car-light-high")
+    registered = len(er.async_entries_for_config_entry(entity_registry, loaded_entry.entry_id))
 
     fake_api.capabilities[MOWER_ID]["firmware_update"] = False
     fake_api.capabilities[MOWER_ID]["light"] = False
     await refresh_static(loaded_entry)
     await hass.async_block_till_done()
-    assert entity_registry.async_get(FIRMWARE) is None
-    assert entity_registry.async_get(FIRMWARE_CHECK) is None
-    assert entity_registry.async_get("switch.luba_camera_light") is None
+    for entity_id in (FIRMWARE, FIRMWARE_CHECK, LIGHT):
+        assert entity_registry.async_get(entity_id) is not None, entity_id
+        assert state_of(hass, entity_id).state == STATE_UNAVAILABLE, entity_id
+    light = entity_registry.async_get(LIGHT)
+    assert light is not None
+    assert (light.name, light.icon) == ("Headlight", "mdi:car-light-high")
+
+    fake_api.capabilities[MOWER_ID]["firmware_update"] = True
+    fake_api.capabilities[MOWER_ID]["light"] = True
+    await refresh_static(loaded_entry)
+    await hass.async_block_till_done()
+    for entity_id in (FIRMWARE, FIRMWARE_CHECK, LIGHT):
+        assert state_of(hass, entity_id).state != STATE_UNAVAILABLE, entity_id
+    assert state_of(hass, LIGHT).attributes["friendly_name"].endswith("Headlight")
+    assert (
+        len(er.async_entries_for_config_entry(entity_registry, loaded_entry.entry_id)) == registered
+    )
+
+
+async def test_never_offered_capability_creates_nothing(
+    hass: HomeAssistant,
+    fake_api: FakeMowDeck,
+    loaded_entry: MockConfigEntry,
+    entity_registry: er.EntityRegistry,
+) -> None:
+    """Entities of a capability the mower never had are not created, not even unavailable."""
+    assert not fake_api.capabilities[MOWER_ID].get("firmware_update")
+    fake_api.capabilities[MOWER_ID]["model"] = "Luba mini"
+    await refresh_static(loaded_entry)
+    await hass.async_block_till_done()
+    for entity_id in (FIRMWARE, FIRMWARE_CHECK):
+        assert entity_registry.async_get(entity_id) is None, entity_id
+        assert hass.states.get(entity_id) is None, entity_id
 
 
 # Blade change and permissions
@@ -208,7 +247,7 @@ async def test_blade_changed_button(
 async def test_blade_changed_needs_fleet_manage(
     hass: HomeAssistant, fake_api: FakeMowDeck, loaded_entry: MockConfigEntry
 ) -> None:
-    """Without can_manage_mowers the button goes away; a 403 names fleet.manage."""
+    """Without can_manage_mowers the button is unavailable; a 403 names fleet.manage."""
     assert hass.states.get(BLADE_CHANGED) is not None
     fake_api.relations = {"can_view", "can_control"}
     with pytest.raises(HomeAssistantError) as err:
@@ -220,7 +259,8 @@ async def test_blade_changed_needs_fleet_manage(
     }
     await refresh_static(loaded_entry)
     await hass.async_block_till_done()
-    assert hass.states.get(BLADE_CHANGED) is None
+    # Kept (a permission can come back), but unavailable.
+    assert state_of(hass, BLADE_CHANGED).state == STATE_UNAVAILABLE
 
 
 @pytest.mark.usefixtures("entity_registry_enabled_by_default")
@@ -270,6 +310,7 @@ async def test_remove_device(
     fake_api: FakeMowDeck,
     loaded_entry: MockConfigEntry,
     device_registry: dr.DeviceRegistry,
+    entity_registry: er.EntityRegistry,
 ) -> None:
     """A visible mower's device cannot be deleted; a vanished mower's device goes by itself."""
     device = mower_device(device_registry, loaded_entry)
@@ -280,6 +321,8 @@ async def test_remove_device(
     await loaded_entry.runtime_data.coordinator.async_refresh()
     await hass.async_block_till_done()
     assert mower_device(device_registry, loaded_entry) is None
+    assert entity_registry.async_get(MOWER) is None
+    assert entity_registry.async_get(LIGHT) is None
     assert await async_remove_config_entry_device(hass, loaded_entry, device)
 
 

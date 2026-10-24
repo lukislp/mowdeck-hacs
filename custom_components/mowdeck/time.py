@@ -13,7 +13,6 @@ from datetime import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.time import TimeEntity
-from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ServiceValidationError
 
@@ -55,7 +54,6 @@ async def async_setup_entry(
             "time_window",
             lambda c, m, key: [SettingTime(c, m, key, START), SettingTime(c, m, key, END)],
         ),
-        domain=Platform.TIME,
     )
 
 

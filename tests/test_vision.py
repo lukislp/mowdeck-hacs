@@ -207,7 +207,7 @@ async def test_start_refused(hass: HomeAssistant, fake_api: FakeMowDeck) -> None
 async def test_start_needs_drive_permission(
     hass: HomeAssistant, fake_api: FakeMowDeck, loaded_entry: MockConfigEntry
 ) -> None:
-    """Without can_drive there is no start button; a 403 names mower.drive."""
+    """Without can_drive the start button is unavailable; a 403 names mower.drive."""
     assert hass.states.get(BUTTON) is not None
     fake_api.relations = {"can_view", "can_control"}
     with pytest.raises(HomeAssistantError) as err:
@@ -222,7 +222,7 @@ async def test_start_needs_drive_permission(
     coordinator._static_fetched_at.clear()
     await coordinator.async_refresh()
     await hass.async_block_till_done()
-    assert hass.states.get(BUTTON) is None
+    assert hass.states.get(BUTTON).state == "unavailable"  # type: ignore[union-attr]
 
 
 async def test_mowdeck_without_vision(

@@ -48,7 +48,7 @@ from homeassistant.util import dt as dt_util
 from .api import MowDeckApiError, MowDeckError, MowDeckForbiddenError, MowDeckNotFoundError
 from .camera_relay import CameraRelayError, RelaySession, RelayViewer
 from .const import DOMAIN
-from .entity import MowDeckEntity
+from .entity import MowDeckEntity, async_add_mower_entities
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -171,25 +171,22 @@ async def async_setup_entry(
     coordinator = entry.runtime_data.coordinator
     catalog = CameraCatalog(hass, entry.entry_id)
     await catalog.async_load()
-    added: set[tuple[str, str | None]] = set()
 
-    @callback
-    def _add_new() -> None:
-        new: list[MowDeckCamera] = []
-        for mower_id in coordinator.data.mowers:
-            if not has_camera(coordinator.data.capabilities.get(mower_id, {})):
-                continue
-            for camera_id in [None, *catalog.extra_cameras(mower_id)]:
-                if (mower_id, camera_id) in added:
-                    continue
-                added.add((mower_id, camera_id))
-                new.append(MowDeckCamera(coordinator, mower_id, catalog, camera_id))
-        if new:
-            async_add_entities(new)
+    def cameras(coordinator: MowDeckCoordinator, mower_id: str) -> list[MowDeckCamera]:
+        if not has_camera(coordinator.data.capabilities.get(mower_id, {})):
+            return []
+        return [
+            MowDeckCamera(coordinator, mower_id, catalog, camera_id)
+            for camera_id in [None, *catalog.extra_cameras(mower_id)]
+        ]
 
-    _add_new()
-    entry.async_on_unload(coordinator.async_add_listener(_add_new))
-    entry.async_on_unload(async_dispatcher_connect(hass, catalog.signal, _add_new))
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        cameras,
+        fingerprint=lambda m: (coordinator.fingerprint(m), tuple(catalog.extra_cameras(m))),
+        signals=[catalog.signal],
+    )
     entry.async_on_unload(catalog.async_flush)
 
 

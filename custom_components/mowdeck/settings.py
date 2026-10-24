@@ -13,9 +13,10 @@ token permission ``fleet.manage``). The platforms build one entity per declared 
   off (``null``).
 
 They are configuration entities, only created for tokens that may manage the mower, and they
-follow the declaration: a setting that disappears (other firmware, other connection) takes its
-entities with it. Keys MowDeck knows have translated names (``KNOWN_SETTINGS``); any other key
-is shown as "Setting <key>".
+follow the declaration: a setting that disappears (a link that is down, other firmware) leaves
+its entities registered and unavailable until it is declared again, with the range or options
+it is declared with then. Keys MowDeck knows have translated names (``KNOWN_SETTINGS``); any
+other key is shown as "Setting <key>".
 """
 
 from __future__ import annotations

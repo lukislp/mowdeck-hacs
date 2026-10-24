@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
-from homeassistant.const import EntityCategory, Platform
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
 
@@ -50,12 +50,11 @@ async def async_setup_entry(
             selects.append(PatternSelect(coordinator, mower_id))
         return selects
 
-    async_add_mower_entities(entry, async_add_entities, entities, domain=Platform.SELECT)
+    async_add_mower_entities(entry, async_add_entities, entities)
     async_add_mower_entities(
         entry,
         async_add_entities,
         lambda c, m: setting_entities(c, m, "enum", lambda c, m, key: [SettingSelect(c, m, key)]),
-        domain=Platform.SELECT,
     )
 
 

@@ -20,8 +20,11 @@ from homeassistant.util import dt as dt_util
 from .api import MowDeckAuthError, MowDeckError, MowDeckForbiddenError, MowDeckNotFoundError
 from .const import CAN_CONTROL, CAN_EDIT_SCHEDULE, SCHEDULER_REFRESH
 from .coordinator import MowDeckCoordinator, MowDeckServiceCoordinator
+from .entity import ScheduleEntity
 
 if TYPE_CHECKING:
+    from homeassistant.helpers.entity import Entity
+
     from . import MowDeckConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
@@ -198,6 +201,18 @@ class SchedulerCoordinator(MowDeckServiceCoordinator[SchedulerData]):
                 if started is not None and (newest is None or started > newest[0]):
                     newest = (started, run, schedule)
         return (newest[1], newest[2]) if newest else None
+
+    def schedule_gone(self, entity: Entity) -> bool:
+        """A schedule entity whose schedule no longer exists for its mower (deleted in
+        MowDeck, or a group schedule of a group the mower left). Only a successful listing
+        says so: while the Scheduler fails or is missing the entity just turns unavailable."""
+        return (
+            isinstance(entity, ScheduleEntity)
+            and self.last_update_success
+            and self.data.available
+            and entity.schedule_id
+            not in {str(s["id"]) for s in self.schedules_for(entity.mower_id)}
+        )
 
     def fingerprint(self, mower_id: str) -> tuple[Any, ...]:
         """Which schedule entities a mower has: its schedules and what the token may do."""

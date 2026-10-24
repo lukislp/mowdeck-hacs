@@ -13,7 +13,6 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
-from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
@@ -43,7 +42,6 @@ async def async_setup_entry(
         lambda coordinator, m: (
             [MowingCalendar(coordinator, m, scheduler)] if scheduler.data.available else []
         ),
-        domain=Platform.CALENDAR,
         fingerprint=lambda m: scheduler.data.available,
         listen=[scheduler],
     )

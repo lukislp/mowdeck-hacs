@@ -157,6 +157,29 @@ async def test_camera_entity_without_a_stream(
     assert not fake_api.lease_history
 
 
+async def test_camera_outlives_a_lost_capability(
+    hass: HomeAssistant,
+    fake_api: FakeMowDeck,
+    camera_entry: MockConfigEntry,
+    entity_registry: er.EntityRegistry,
+) -> None:
+    """A link that stops naming the camera leaves the entity registered and unavailable; it is
+    back with the capability."""
+    fake_api.capabilities[MOWER_ID]["camera"] = None
+    coordinator = camera_entry.runtime_data.coordinator
+    coordinator._static_fetched_at.clear()
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert entity_registry.async_get(CAMERA) is not None
+    assert state_of(hass, CAMERA).state == "unavailable"
+
+    fake_api.capabilities[MOWER_ID]["camera"] = "cloud"
+    coordinator._static_fetched_at.clear()
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert state_of(hass, CAMERA).state == "idle"
+
+
 @pytest.mark.usefixtures("camera_entry")
 async def test_no_still_image_before_mowdeck_0_8(
     hass: HomeAssistant, hass_client: Any, fake_api: FakeMowDeck
