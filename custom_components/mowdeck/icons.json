@@ -48,7 +48,16 @@
       "schedule_run_now": { "default": "mdi:play-circle-outline" },
       "schedule_skip_next": { "default": "mdi:skip-next-circle-outline" },
       "start_ai_analysis": { "default": "mdi:robot-confused-outline" },
-      "stop_spot_run": { "default": "mdi:stop-circle" }
+      "stop_spot_run": { "default": "mdi:stop-circle" },
+      "leave_dock": { "default": "mdi:home-export-outline" },
+      "restart_mower": { "default": "mdi:restart" },
+      "sync_map": { "default": "mdi:map-search-outline" },
+      "relocate_dock": { "default": "mdi:home-map-marker" },
+      "resync_rtk": { "default": "mdi:crosshairs-gps" },
+      "emergency_nudge_forward": { "default": "mdi:arrow-up" },
+      "emergency_nudge_back": { "default": "mdi:arrow-down" },
+      "emergency_nudge_left": { "default": "mdi:arrow-left" },
+      "emergency_nudge_right": { "default": "mdi:arrow-right" }
     },
     "number": {
       "blade_height": { "default": "mdi:arrow-expand-vertical" },
