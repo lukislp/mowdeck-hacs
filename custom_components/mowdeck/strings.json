@@ -142,6 +142,9 @@
       "blade_changed": {
         "name": "Blade changed"
       },
+      "blade_threshold_reset": {
+        "name": "Blade change reminder: follow the mower"
+      },
       "schedule_run_now": {
         "name": "Run {schedule} now"
       },
@@ -239,6 +242,14 @@
         "state_attributes": {
           "custom": {
             "name": "Set for this mower"
+          },
+          "source": {
+            "name": "Threshold from",
+            "state": {
+              "custom": "Set in MowDeck",
+              "device": "Mower (own warning)",
+              "default": "MowDeck default"
+            }
           }
         }
       },
@@ -488,16 +499,48 @@
           "threshold": {
             "name": "Reminder threshold"
           },
+          "threshold_source": {
+            "name": "Threshold from",
+            "state": {
+              "custom": "Set in MowDeck",
+              "device": "Mower (own warning)",
+              "default": "MowDeck default"
+            }
+          },
           "changed_at": {
             "name": "Last blade change"
           }
         }
       },
       "mowing_hours": {
-        "name": "Mowing hours"
+        "name": "Mowing hours",
+        "state_attributes": {
+          "source": {
+            "name": "Source",
+            "state": {
+              "device": "Mower (lifetime counter)",
+              "telemetry": "MowDeck (since it started tracking)"
+            }
+          }
+        }
       },
       "mowing_distance": {
-        "name": "Distance driven"
+        "name": "Distance driven",
+        "state_attributes": {
+          "source": {
+            "name": "Source",
+            "state": {
+              "device": "Mower (lifetime counter)",
+              "telemetry": "MowDeck (since it started tracking)"
+            }
+          }
+        }
+      },
+      "mowing_hours_mowdeck": {
+        "name": "Mowing hours (since MowDeck)"
+      },
+      "mowing_distance_mowdeck": {
+        "name": "Distance driven (since MowDeck)"
       },
       "battery_cycles": {
         "name": "Battery cycles",

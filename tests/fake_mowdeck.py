@@ -746,6 +746,16 @@ class FakeMowDeck:
         hours = body["hours"]
         health["blade_hours_threshold"] = 50.0 if hours is None else hours
         health["blade_hours_threshold_custom"] = hours is not None
+        # MowDeck 0.18.1: the one threshold in effect (set, else the mower's warning, else 50 h).
+        warn = health.get("device_blade_warn_hours")
+        if hours is not None:
+            effective, source = hours, "custom"
+        elif health.get("device_blade_hours") is not None and warn is not None:
+            effective, source = warn, "device"
+        else:
+            effective, source = 50.0, "default"
+        health["blade_hours_threshold_effective"] = effective
+        health["blade_hours_threshold_source"] = source
         return web.json_response(health)
 
     # Scheduler
