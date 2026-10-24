@@ -1,6 +1,6 @@
 """Numbers of a MowDeck mower: blade height, mowing speed, the manual-drive speed setting, the
-angle, border laps and path spacing of the mowing defaults, and MowDeck's blade change
-reminder.
+angle, border laps and path spacing of the mowing defaults, MowDeck's blade change reminder
+and one per numeric setting the mower declares (``settings.py``).
 
 Ranges come from the mower's capabilities, limited to what the Fleet command API accepts.
 Speeds are read, shown and sent with two decimals (``SPEED_DECIMALS``).
@@ -19,6 +19,7 @@ from homeassistant.components.number import (
 )
 from homeassistant.const import (
     DEGREE,
+    PERCENTAGE,
     EntityCategory,
     Platform,
     UnitOfLength,
@@ -44,6 +45,7 @@ from .const import (
 )
 from .entity import MowDeckEntity, async_add_mower_entities
 from .select import async_save_mow_defaults, native_patterns
+from .settings import SettingEntity, setting_entities
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -92,6 +94,13 @@ async def async_setup_entry(
         return numbers
 
     async_add_mower_entities(entry, async_add_entities, entities, domain=Platform.NUMBER)
+
+    async_add_mower_entities(
+        entry,
+        async_add_entities,
+        lambda c, m: setting_entities(c, m, "int", lambda c, m, key: [SettingNumber(c, m, key)]),
+        domain=Platform.NUMBER,
+    )
 
     health = entry.runtime_data.health
     coordinator = entry.runtime_data.coordinator
@@ -421,3 +430,51 @@ class BladeThresholdNumber(MowDeckEntity, NumberEntity):
             "fleet.manage",
         )
         self._health.async_set_totals(self.mower_id, totals)
+
+
+class SettingNumber(SettingEntity, NumberEntity):
+    """A numeric setting of the mower (``set_setting`` with a whole number) with the declared
+    range, step and unit."""
+
+    setting_type = "int"
+
+    _attr_mode = NumberMode.AUTO
+
+    def _bound(self, name: str, default: int) -> int:
+        value = self.spec.get(name)
+        return value if isinstance(value, int) and not isinstance(value, bool) else default
+
+    @property
+    def native_min_value(self) -> float:
+        """The declared minimum (0 without one)."""
+        return self._bound("min", 0)
+
+    @property
+    def native_max_value(self) -> float:
+        """The declared maximum (100 without one)."""
+        return self._bound("max", 100)
+
+    @property
+    def native_step(self) -> float:
+        """The declared step (1 without one)."""
+        return self._bound("step", 1)
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        """The declared unit (``%`` as Home Assistant's percentage)."""
+        unit = self.spec.get("unit")
+        if unit == "%":
+            return PERCENTAGE
+        return unit if isinstance(unit, str) and unit else None
+
+    @property
+    def native_value(self) -> float | None:
+        """The reported value; unknown while the mower has not reported it."""
+        value = self.setting_value
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            return None
+        return value
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Send the value as a whole number."""
+        await self.async_set_setting(round(value))
