@@ -1,6 +1,7 @@
 {
   "domain": "mowdeck",
   "name": "MowDeck",
+  "categories": ["garden_plants"],
   "codeowners": ["@lukislp"],
   "config_flow": true,
   "dependencies": [],
