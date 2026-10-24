@@ -20,6 +20,23 @@ if TYPE_CHECKING:
     from . import MowDeckConfigEntry
 
 
+def blade_threshold(health: dict[str, Any]) -> tuple[Any, str]:
+    """The one blade change threshold in effect and its source (``custom`` set in MowDeck,
+    ``device`` the mower's own warning, ``default`` MowDeck's default), as MowDeck names it in
+    ``blade_hours_threshold_effective``. MowDeck before that field: the threshold set in MowDeck,
+    else the mower's own warning while its own counter is shown, else MowDeck's threshold."""
+    effective = health.get("blade_hours_threshold_effective")
+    source = health.get("blade_hours_threshold_source")
+    if isinstance(effective, int | float) and not isinstance(effective, bool) and source:
+        return effective, str(source)
+    if health.get("blade_hours_threshold_custom"):
+        return health.get("blade_hours_threshold"), "custom"
+    warn = health.get("device_blade_warn_hours")
+    if health.get("blade_source") == "device" and warn is not None:
+        return warn, "device"
+    return health.get("blade_hours_threshold"), "default"
+
+
 @dataclass
 class HealthData:
     """Health totals by mower id (missing before the mower's first telemetry)."""

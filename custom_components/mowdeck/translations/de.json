@@ -142,6 +142,9 @@
       "blade_changed": {
         "name": "Messer gewechselt"
       },
+      "blade_threshold_reset": {
+        "name": "Erinnerung Messerwechsel: dem Mäher folgen"
+      },
       "schedule_run_now": {
         "name": "{schedule} jetzt starten"
       },
@@ -239,6 +242,14 @@
         "state_attributes": {
           "custom": {
             "name": "Für diesen Mäher gesetzt"
+          },
+          "source": {
+            "name": "Schwelle von",
+            "state": {
+              "custom": "In MowDeck gesetzt",
+              "device": "Mäher (eigene Warnung)",
+              "default": "MowDeck-Standard"
+            }
           }
         }
       },
@@ -488,16 +499,48 @@
           "threshold": {
             "name": "Erinnerungsschwelle"
           },
+          "threshold_source": {
+            "name": "Schwelle von",
+            "state": {
+              "custom": "In MowDeck gesetzt",
+              "device": "Mäher (eigene Warnung)",
+              "default": "MowDeck-Standard"
+            }
+          },
           "changed_at": {
             "name": "Letzter Messerwechsel"
           }
         }
       },
       "mowing_hours": {
-        "name": "Mähstunden"
+        "name": "Mähstunden",
+        "state_attributes": {
+          "source": {
+            "name": "Quelle",
+            "state": {
+              "device": "Mäher (Gesamtzähler)",
+              "telemetry": "MowDeck (seit Beginn der Erfassung)"
+            }
+          }
+        }
       },
       "mowing_distance": {
-        "name": "Gefahrene Strecke"
+        "name": "Gefahrene Strecke",
+        "state_attributes": {
+          "source": {
+            "name": "Quelle",
+            "state": {
+              "device": "Mäher (Gesamtzähler)",
+              "telemetry": "MowDeck (seit Beginn der Erfassung)"
+            }
+          }
+        }
+      },
+      "mowing_hours_mowdeck": {
+        "name": "Mähstunden (seit MowDeck)"
+      },
+      "mowing_distance_mowdeck": {
+        "name": "Gefahrene Strecke (seit MowDeck)"
       },
       "battery_cycles": {
         "name": "Akkuzyklen",
