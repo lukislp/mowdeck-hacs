@@ -147,6 +147,33 @@
       },
       "stop_spot_run": {
         "name": "Stop spot run"
+      },
+      "leave_dock": {
+        "name": "Leave the dock"
+      },
+      "restart_mower": {
+        "name": "Restart mower"
+      },
+      "sync_map": {
+        "name": "Read map again"
+      },
+      "relocate_dock": {
+        "name": "Relocate charging station"
+      },
+      "resync_rtk": {
+        "name": "Read RTK and dock position again"
+      },
+      "emergency_nudge_forward": {
+        "name": "Emergency nudge forward"
+      },
+      "emergency_nudge_back": {
+        "name": "Emergency nudge back"
+      },
+      "emergency_nudge_left": {
+        "name": "Emergency nudge left"
+      },
+      "emergency_nudge_right": {
+        "name": "Emergency nudge right"
       }
     },
     "calendar": {

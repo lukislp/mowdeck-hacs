@@ -130,6 +130,9 @@ Per mower one device (manufacturer Mammotion, model from the capabilities, firmw
 | AI recovery (event) | `event.luba_ai_recovery` | fires `created` and `updated` for every proposal change |
 | Spot run | `sensor.luba_spot_run` | the spot run MowDeck drives (`spot_run` of the state): `preparing`, `undocking`, `waiting_rtk`, `transit`, `spot_mowing`, `paused_rtk`, `returning`, `stopping`, `done`, `aborted`, `failed` (kept until the next run); attributes `progress_percent`, `driven_points`, `planned_points`, `segment_index`, `segments_total`, `dry_run`, `reason`, `run_id`. Only for mowers MowDeck can drive (`manual_drive`) |
 | Stop spot run | `button.luba_stop_spot_run` | `spot_stop`: zero frame, blades off, the mower stays where it is. Only for mowers MowDeck can drive; needs `mower.control` |
+| Leave the dock | `button.luba_leave_the_dock` | `leave_dock`: the mower drives out of its charging station and stops in front of it. Needs `mower.control`; only where the connection offers it (see [Maintenance and emergency nudges](#maintenance-and-emergency-nudges)) |
+| Restart mower, Read map again, Relocate charging station, Read RTK and dock position again | `button.luba_restart_mower`, `button.luba_read_map_again`, `button.luba_relocate_charging_station`, `button.luba_read_rtk_and_dock_position_again` | maintenance commands; configuration, disabled by default, need `fleet.manage` (see [Maintenance and emergency nudges](#maintenance-and-emergency-nudges)) |
+| Emergency nudge forward, back, left, right | `button.luba_emergency_nudge_forward`, ... | one short `manual_drive` frame; configuration, disabled by default, need `mower.drive`; only for mowers MowDeck can drive, backwards only where they may reverse |
 | Map | `image.luba_map` | the mower's map rendered as SVG in Home Assistant (see [Map and heatmaps](#map-and-heatmaps)); only for mowers with a map |
 | Coverage heatmap, RTK heatmap, Wi-Fi heatmap, Mobile network heatmap | `image.luba_coverage_heatmap`, `image.luba_rtk_heatmap`, `image.luba_wi_fi_heatmap`, `image.luba_mobile_network_heatmap` | a heatmap layer of the last 7 days as SVG; disabled by default (only an enabled one is read from MowDeck); attributes `from`, `to`, `cell_m`, `legend` (`ratio`, `fix`, `dbm`), `legend_min`, `legend_max`, `samples`, `truncated` |
 | Missed area | `sensor.luba_missed_area` | the area the blades missed in the last 7 days: the sum of the coverage layer's missed spots (`gaps[].area_m2`) in m², attributes `spots`, `from`, `to`; refreshed every 30 minutes |
@@ -300,6 +303,30 @@ data:
   pattern: spiral
   speed: 0.2
 ```
+
+## Maintenance and emergency nudges
+
+MowDeck 0.11 sends a few one-shot device actions next to mowing ([ADR 0048](https://github.com/lukislp/mowdeck/blob/main/docs/adr/0048-maintenance-commands.md)). The connection lists the ones it supports (`MowerCapabilities.maintenance`), and only those get a button:
+
+| Button | Command | Allowed when (checked by MowDeck) | Permission |
+| --- | --- | --- | --- |
+| Leave the dock | `leave_dock` | in the dock (docked or charging), no error, no command waiting for its confirmation | `mower.control` |
+| Restart mower | `restart_mower` | at rest (docked, charging or idle), no error, no drive session, no command waiting for its confirmation; the mower is offline while it boots | `fleet.manage` |
+| Read map again | `sync_map` | not while a manual drive session is open; MowDeck publishes the new map at once | `fleet.manage` |
+| Relocate charging station | `relocate_dock` | in the dock, no job, no error; the mower forgets the stored dock position and learns it again (after the station was moved) | `fleet.manage` |
+| Read RTK and dock position again | `resync_rtk` | always (no motion), except during a firmware update | `fleet.manage` |
+
+All five need the plan feature `control`. Leaving the dock is ordinary control (it is what a start does first), so it is enabled and has no entity category. The other four reset or reread parts of the mower: they are configuration entities, disabled by default. Enable them under the device's entities when needed.
+
+**Emergency nudges** (as in Mammotion-HA): four buttons that move a stuck mower a little. Each press sends one `manual_drive` frame, `linear` or `angular` 0.4 for `ttl_ms` 500 with the blades off; MowDeck's dead-man timer stops the wheels after 500 ms. Left turns are positive.
+
+- Only for mowers MowDeck can drive (`manual_drive`); **Emergency nudge back** only where the mower may reverse (`drive_reverse`). Over the Mammotion cloud alone `manual_drive` is false (MowDeck drives Mammotion mowers over the Bluetooth bridge), so the nudges stay hidden.
+- Configuration, disabled by default; need `mower.drive` on the mower and the plan feature `control` (like every command but the emergency stop).
+- MowDeck refuses a nudge during a sensor stop (lift, tilt, collision), while the mower mows or returns (pause it first), while a start or return waits for its confirmation, and during a spot run, drive calibration or firmware update. A drive-recoverable error (stuck, wheel slip) is the case they are for and is accepted.
+
+**Remote drive is not offered.** Mammotion-HA's remote drive switch opens a vendor session that its nudge buttons then use. In MowDeck a drive session is a Realtime WebSocket session (`drive_start`, `drive_frame` about ten times a second, `drive_stop`) that needs a live joystick: the dead-man timer stops the mower within a second unless frames keep coming. Home Assistant has no joystick to feed it, and a switch that keeps a session open would only send zero frames while blocking other drivers (Vision recovery, the web app) with `drive_busy`. The nudges already open and close a drive session per press, so nothing is lost; drive the mower live in the MowDeck web app.
+
+**Refusals.** Fleet accepts a command before the mower's controller checks these rules. The integration waits up to 10 s for the controller's verdict over the Realtime WebSocket and raises an error with MowDeck's reason when the command is refused (`rejected`, `failed` or `expired`), for example "The mower refused restart_mower (rejected): the mower is mowing; a restart needs it docked, charging or idle (end the job first)". Without a connected WebSocket, or without a verdict in time, the press counts as sent; `event.luba_command` still shows what became of it.
 
 ## Troubleshooting
 
