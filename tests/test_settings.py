@@ -42,6 +42,7 @@ NIGHT_LIGHT = "switch.luba_night_light"
 VOLUME = "number.luba_voice_volume"
 RECHARGE = "number.luba_return_to_charge_at"
 TURN_STYLE = "select.luba_turning_style"
+BLADE_SPEED = "select.luba_blade_speed"
 WILDLIFE = "select.luba_wildlife_protection"
 QUIET_START = "time.luba_non_working_hours_start"
 QUIET_END = "time.luba_non_working_hours_end"
@@ -58,6 +59,12 @@ SETTINGS: list[dict[str, Any]] = [
         "type": "enum",
         "group": "driving",
         "options": ["in_place", "multi_point"],
+    },
+    {
+        "key": "blade_speed",
+        "type": "enum",
+        "group": "mowing",
+        "options": ["slow", "normal", "fast"],
     },
     {
         "key": "wildlife_safety",
@@ -94,6 +101,7 @@ VALUES: dict[str, Any] = {
     "rain_detection": True,
     "turn_style": "multi_point",
     "wildlife_safety": "off",
+    "blade_speed": "normal",
     "night_light": False,
     "recharge_level": 20,
     "voice_volume": 60,
@@ -165,6 +173,9 @@ async def test_entities_follow_the_declaration(
     assert turn.state == "multi_point"
     assert turn.attributes["options"] == ["in_place", "multi_point"]
     assert state_of(hass, WILDLIFE).state == "off"
+    blade = state_of(hass, BLADE_SPEED)
+    assert blade.state == "normal"
+    assert blade.attributes["options"] == ["slow", "normal", "fast"]
     assert state_of(hass, QUIET_START).state == "22:00:00"
     assert state_of(hass, QUIET_END).state == "06:00:00"
     assert state_of(hass, QUIET_OFF).state == STATE_UNKNOWN
@@ -196,6 +207,7 @@ async def test_changes_send_set_setting(hass: HomeAssistant, fake_api: FakeMowDe
     await call(hass, "switch", SERVICE_TURN_ON, NIGHT_LIGHT)
     await call(hass, "number", SERVICE_SET_VALUE, VOLUME, **{ATTR_VALUE: 75.0})
     await call(hass, "select", SERVICE_SELECT_OPTION, TURN_STYLE, **{ATTR_OPTION: "in_place"})
+    await call(hass, "select", SERVICE_SELECT_OPTION, BLADE_SPEED, **{ATTR_OPTION: "fast"})
     await call(hass, "time", SERVICE_SET_TIME, QUIET_START, **{ATTR_TIME: "21:30:45"})
     await call(hass, "time", SERVICE_SET_TIME, QUIET_END, **{ATTR_TIME: "07:00:00"})
     assert sent(fake_api) == [
@@ -203,6 +215,7 @@ async def test_changes_send_set_setting(hass: HomeAssistant, fake_api: FakeMowDe
         {"kind": "set_setting", "key": "night_light", "value": True},
         {"kind": "set_setting", "key": "voice_volume", "value": 75},
         {"kind": "set_setting", "key": "turn_style", "value": "in_place"},
+        {"kind": "set_setting", "key": "blade_speed", "value": "fast"},
         {
             "kind": "set_setting",
             "key": "non_work_hours",
@@ -219,6 +232,7 @@ async def test_changes_send_set_setting(hass: HomeAssistant, fake_api: FakeMowDe
     assert state_of(hass, NIGHT_LIGHT).state == STATE_ON
     assert state_of(hass, VOLUME).state == "75"
     assert state_of(hass, TURN_STYLE).state == "in_place"
+    assert state_of(hass, BLADE_SPEED).state == "fast"
     assert state_of(hass, QUIET_START).state == "21:30:00"
 
 

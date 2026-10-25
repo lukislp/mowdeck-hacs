@@ -315,6 +315,14 @@
           "follow_perimeter": "Along the perimeter"
         }
       },
+      "setting_blade_speed": {
+        "name": "Blade speed",
+        "state": {
+          "slow": "Slow",
+          "normal": "Normal",
+          "fast": "Fast"
+        }
+      },
       "setting_wildlife_safety": {
         "name": "Wildlife protection",
         "state": {
