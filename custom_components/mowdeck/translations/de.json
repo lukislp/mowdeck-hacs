@@ -315,6 +315,14 @@
           "follow_perimeter": "Am Rand entlang"
         }
       },
+      "setting_blade_speed": {
+        "name": "Messerdrehzahl",
+        "state": {
+          "slow": "Langsam",
+          "normal": "Normal",
+          "fast": "Schnell"
+        }
+      },
       "setting_wildlife_safety": {
         "name": "Tierschutz",
         "state": {

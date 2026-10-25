@@ -85,6 +85,7 @@
       "mow_order": { "default": "mdi:sort" },
       "setting_turn_style": { "default": "mdi:rotate-right" },
       "setting_traversal_mode": { "default": "mdi:map-marker-path" },
+      "setting_blade_speed": { "default": "mdi:fan" },
       "setting_wildlife_safety": { "default": "mdi:paw" },
       "setting_voice_gender": { "default": "mdi:account-voice" },
       "setting_other": { "default": "mdi:cog-outline" }
