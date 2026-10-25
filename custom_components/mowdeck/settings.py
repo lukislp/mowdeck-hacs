@@ -42,6 +42,7 @@ KNOWN_SETTINGS: dict[str, str] = {
     "rain_detection": "bool",
     "turn_style": "enum",
     "traversal_mode": "enum",
+    "blade_speed": "enum",
     "side_led": "bool",
     "night_light": "bool",
     "wildlife_safety": "enum",
