@@ -560,6 +560,18 @@ class MowDeckClient:
         except MowDeckNotFoundError:
             return None
 
+    async def get_mower_error(self, mower_id: str, locale: str) -> dict[str, Any] | None:
+        """``GET /telemetry/mowers/{id}/error`` (the error lexicon, ADR 0067): the mower's
+        current error in plain words in ``locale`` (``MowerErrorOut``, ``error`` null while it
+        reports none). None on a 404: before the first state, or a MowDeck without the
+        lexicon."""
+        query = urlencode({"locale": locale})
+        try:
+            body = await self._request("GET", f"{TELEMETRY}/mowers/{mower_id}/error?{query}")
+        except MowDeckNotFoundError:
+            return None
+        return dict(body) if isinstance(body, dict) else None
+
     async def reset_blade(self, mower_id: str, note: str | None = None) -> dict[str, Any]:
         """``POST /telemetry/mowers/{id}/health/blade-reset``: record a blade change; the new
         health totals (``can_manage_mowers``)."""

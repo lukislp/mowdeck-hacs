@@ -292,12 +292,14 @@ async def test_error_category(hass: HomeAssistant, fake_api: FakeMowDeck) -> Non
     assert attributes["drive_recoverable"] is False
     assert state_of(hass, "sensor.luba_error_category").state == "unknown"
 
-    # An unknown category of a newer MowDeck is unknown, not an invalid enum state.
+    # A category of a newer MowDeck that this version does not know is "other", not an
+    # invalid enum state.
     await fake_api.push_state(
         MOWER_ID, mower_state(activity="error", error_code="9", error_category="meteor")
     )
     await wait_for(hass, lambda: state_of(hass, "sensor.luba_error_code").state == "9")
-    assert state_of(hass, "sensor.luba_error_category").state == "unknown"
+    assert state_of(hass, "sensor.luba_error_category").state == "other"
+    assert state_of(hass, "sensor.luba_error_code").attributes["error_category"] == "other"
 
 
 @pytest.mark.usefixtures("loaded_entry")

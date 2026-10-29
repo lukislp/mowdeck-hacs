@@ -412,6 +412,9 @@
               "blade_motor": "Messer oder Motor",
               "rain": "Regen",
               "positioning": "Positionierung",
+              "communication": "Kommunikation",
+              "docking": "Ladestation",
+              "firmware": "Firmware",
               "other": "Sonstiges"
             }
           },
@@ -498,7 +501,36 @@
           "blade_motor": "Messer oder Motor",
           "rain": "Regen",
           "positioning": "Positionierung",
+          "communication": "Kommunikation",
+          "docking": "Ladestation",
+          "firmware": "Firmware",
           "other": "Sonstiges"
+        },
+        "state_attributes": {
+          "title": {
+            "name": "Titel"
+          },
+          "description": {
+            "name": "Beschreibung"
+          },
+          "cause": {
+            "name": "Ursache"
+          },
+          "steps": {
+            "name": "Schritte"
+          },
+          "severity": {
+            "name": "Schweregrad",
+            "state": {
+              "info": "Info",
+              "warning": "Warnung",
+              "error": "Fehler",
+              "critical": "Kritisch"
+            }
+          },
+          "user_action": {
+            "name": "Eingreifen nötig"
+          }
         }
       },
       "blade_hours": {
