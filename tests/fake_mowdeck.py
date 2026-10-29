@@ -429,6 +429,10 @@ class FakeMowDeck:
     base_station_updates: list[dict[str, Any]] = field(default_factory=list)
     base_station_check_status: int | None = None
     blade_resets: list[dict[str, Any]] = field(default_factory=list)
+    # The error lexicon (ADR 0067): texts by error code and locale ({"1201": {"en": {...}}});
+    # None: a MowDeck before the lexicon, GET /telemetry/mowers/{id}/error answers a plain 404.
+    error_lexicon: dict[str, dict[str, dict[str, Any]]] | None = None
+    error_queries: list[dict[str, str]] = field(default_factory=list)
     # MowDeck 0.8: the per-mower blade threshold and the camera still image (None: a MowDeck
     # before 0.8, the routes answer a plain 404).
     blade_thresholds: list[dict[str, Any]] | None = None
@@ -570,6 +574,7 @@ class FakeMowDeck:
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/capabilities", self._caps)
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/map", self._map)
         app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/health", self._health)
+        app.router.add_get("/api/v1/telemetry/mowers/{mower_id}/error", self._mower_error)
         app.router.add_get("/api/v1/realtime/ws", self._ws)
         sched = "/api/v1/scheduler/schedules"
         app.router.add_get(sched, self._schedules)
@@ -1168,6 +1173,47 @@ class FakeMowDeck:
         if mower_id not in self.health:
             return problem(404, "Not found", "no telemetry yet")
         return web.json_response(self.health[mower_id])
+
+    async def _mower_error(self, request: web.Request) -> web.Response:
+        if self.error_lexicon is None:
+            return web.Response(status=404, text="404: Not Found")
+        mower_id = request.match_info["mower_id"]
+        if mower_id not in self.states:
+            return problem(404, "Not found", "no telemetry yet")
+        self.error_queries.append({"mower_id": mower_id, **request.query})
+        state = self.states[mower_id]
+        code = state.get("error_code")
+        error = None
+        if code:
+            texts = self.error_lexicon.get(str(code), {})
+            wanted = request.query.get("locale", "en")[:2].lower()
+            locale = wanted if wanted in texts else "en"
+            entry = texts.get(locale)
+            error = {
+                "code": str(code),
+                "known": entry is not None,
+                "vendor": "mammotion" if entry is not None else None,
+                "vendor_name": "Mammotion" if entry is not None else None,
+                "locale": locale,
+                "title": f"Error {code}",
+                "description": "",
+                "cause": None,
+                "steps": [],
+                "severity": "error",
+                "category": state.get("error_category") or "other",
+                "user_action": False,
+                "links": [],
+                "verified": True,
+                **(entry or {}),
+            }
+        return web.json_response(
+            {
+                "mower_id": mower_id,
+                "observed_at": state.get("observed_at"),
+                "activity": state.get("activity"),
+                "error": error,
+            }
+        )
 
     # Camera relay
 

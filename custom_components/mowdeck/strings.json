@@ -412,6 +412,9 @@
               "blade_motor": "Blade or motor",
               "rain": "Rain",
               "positioning": "Positioning",
+              "communication": "Communication",
+              "docking": "Charging station",
+              "firmware": "Firmware",
               "other": "Other"
             }
           },
@@ -498,7 +501,36 @@
           "blade_motor": "Blade or motor",
           "rain": "Rain",
           "positioning": "Positioning",
+          "communication": "Communication",
+          "docking": "Charging station",
+          "firmware": "Firmware",
           "other": "Other"
+        },
+        "state_attributes": {
+          "title": {
+            "name": "Title"
+          },
+          "description": {
+            "name": "Description"
+          },
+          "cause": {
+            "name": "Cause"
+          },
+          "steps": {
+            "name": "Steps"
+          },
+          "severity": {
+            "name": "Severity",
+            "state": {
+              "info": "Info",
+              "warning": "Warning",
+              "error": "Error",
+              "critical": "Critical"
+            }
+          },
+          "user_action": {
+            "name": "Action needed"
+          }
         }
       },
       "blade_hours": {

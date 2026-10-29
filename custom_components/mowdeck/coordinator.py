@@ -29,6 +29,7 @@ from .const import (
     DEFAULT_PATTERN,
     DEFAULT_POLL_INTERVAL,
     DOMAIN,
+    ERROR_EXPLAIN_RETRY,
     ISSUE_FORBIDDEN,
     PUSH_POLL_INTERVAL,
     RELATION_PERMISSION,
@@ -75,6 +76,9 @@ class MowDeckData:
     # Relations the token holds on each mower (keys of RELATION_PERMISSION); a mower is
     # missing while unknown (MowDeck without the permission endpoint, or the check failed).
     permissions: dict[str, frozenset[str]] = field(default_factory=dict)
+    # The current error of a mower in plain words (``ErrorExplanation`` of
+    # ``GET /telemetry/mowers/{id}/error``), only while it is in error and MowDeck explained it.
+    errors: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
@@ -102,6 +106,9 @@ class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
         # area of the map. The area select and the area switches both edit it.
         self.area_selection: dict[str, list[str] | None] = {}
         self._static_fetched_at: dict[str, datetime] = {}
+        # Per mower: the (error code, locale) last asked about, and when a failed read may be
+        # repeated (None: read or in flight, not again for this code and locale).
+        self._error_reads: dict[str, tuple[tuple[str, str], datetime | None]] = {}
         self.data = MowDeckData()
 
     async def _async_update_data(self) -> MowDeckData:
@@ -202,6 +209,8 @@ class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
         for mower_id in mower_ids:
             self.data.mowers.pop(mower_id, None)
             self.data.states.pop(mower_id, None)
+            self.data.errors.pop(mower_id, None)
+            self._error_reads.pop(mower_id, None)
         self.async_update_listeners()
 
     @callback
@@ -219,6 +228,60 @@ class MowDeckCoordinator(DataUpdateCoordinator[MowDeckData]):
             return
         self.data.states[mower_id] = {**state, "firmware_info": dict(info)}
         self.async_update_listeners()
+
+    # The current error in plain words (error lexicon, ADR 0067 in lukislp/mowdeck)
+
+    def error_locale(self) -> str:
+        """The language of Home Assistant as the error texts' locale (``de``, ``en``, ...)."""
+        language = (self.hass.config.language or "en").replace("_", "-")
+        return language.split("-", 1)[0].lower() or "en"
+
+    @callback
+    def async_follow_error(self, mower_id: str) -> None:
+        """While the mower is in error, read its error in plain words once per error code and
+        language (a failed read again after ``ERROR_EXPLAIN_RETRY``); forget it once the error
+        is gone. Nothing is read while the mower reports no error."""
+        state = self.data.states.get(mower_id) or {}
+        code = state.get("error_code")
+        if state.get("activity") != "error" or not code:
+            self.data.errors.pop(mower_id, None)
+            self._error_reads.pop(mower_id, None)
+            return
+        key = (str(code), self.error_locale())
+        read = self._error_reads.get(mower_id)
+        if read is not None and read[0] == key and (read[1] is None or dt_util.utcnow() < read[1]):
+            return
+        self._error_reads[mower_id] = (key, None)
+        self.config_entry.async_create_background_task(
+            self.hass, self._async_read_error(mower_id, key), f"{DOMAIN} error explanation"
+        )
+
+    async def _async_read_error(self, mower_id: str, key: tuple[str, str]) -> None:
+        code, locale = key
+        retry_at: datetime | None = None
+        answer: dict[str, Any] | None = None
+        try:
+            answer = await self.client.get_mower_error(mower_id, locale)
+        except MowDeckError as err:
+            _LOGGER.debug("Error %s of %s not explained: %s", code, mower_id, err)
+            retry_at = dt_util.utcnow() + ERROR_EXPLAIN_RETRY
+        read = self._error_reads.get(mower_id)
+        if read is None or read[0] != key:
+            return  # The error changed or cleared meanwhile.
+        self._error_reads[mower_id] = (key, retry_at)
+        error = answer.get("error") if answer else None
+        if isinstance(error, dict) and str(error.get("code")) == code:
+            self.data.errors[mower_id] = error
+        else:
+            # A MowDeck without the error lexicon (404), or the error cleared on its side.
+            self.data.errors.pop(mower_id, None)
+        self.async_update_listeners()
+
+    def error_explanation(self, mower_id: str) -> dict[str, Any]:
+        """The explanation of the mower's current error code (empty while there is none)."""
+        error = self.data.errors.get(mower_id) or {}
+        current = (self.data.states.get(mower_id) or {}).get("error_code")
+        return error if current and str(error.get("code")) == str(current) else {}
 
     # Read helpers for the entities
 
