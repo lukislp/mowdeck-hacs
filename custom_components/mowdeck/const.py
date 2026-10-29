@@ -155,8 +155,19 @@ ERROR_CATEGORIES: Final = [
     "blade_motor",
     "rain",
     "positioning",
+    "communication",
+    "docking",
+    "firmware",
     "other",
 ]
+# What a category of a newer MowDeck that this version does not know yet shows as.
+ERROR_CATEGORY_FALLBACK: Final = "other"
+# Severity of an explained error (ErrorSeverity of the error lexicon, ADR 0067 in
+# lukislp/mowdeck).
+ERROR_SEVERITIES: Final = ["info", "warning", "error", "critical"]
+# A failed read of an error explanation is retried after this long; a 404 (a MowDeck without
+# the error lexicon) is not retried before the error code changes.
+ERROR_EXPLAIN_RETRY: Final = timedelta(minutes=5)
 # Verdicts of the rain decision (RainDecisionOut.verdict).
 RAIN_VERDICTS: Final = ["run", "hold", "unknown_run", "unknown_hold", "no_location", "disabled"]
 RELATION_PERMISSION: Final = {

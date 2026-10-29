@@ -4,6 +4,7 @@ schedule run, rain pause, wet lawn)."""
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -24,7 +25,7 @@ from homeassistant.const import (
     UnitOfSpeed,
     UnitOfTime,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 
 from .base_station import (
@@ -34,6 +35,8 @@ from .base_station import (
 )
 from .const import (
     ERROR_CATEGORIES,
+    ERROR_CATEGORY_FALLBACK,
+    ERROR_SEVERITIES,
     GNSS_SOLUTIONS,
     NETWORK_KINDS,
     RUN_OUTCOMES,
@@ -76,6 +79,10 @@ RTK_FIX = ["none", "float", "fixed"]
 RTK_SOURCES = ["base_station", "network"]
 CONNECTION_KINDS = ["ble_bridge", "wifi", "cloud", "simulated"]
 BLE_BRIDGE = "ble_bridge"
+
+_LOGGER = logging.getLogger(__name__)
+# Error categories seen that this version does not know (each is logged once).
+_UNKNOWN_CATEGORIES: set[str] = set()
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,11 +156,23 @@ def _job_area(data: MowerData) -> str | None:
 
 
 def _error_category(data: MowerData) -> str | None:
-    """The manufacturer-neutral kind of the fault; only while the mower is in error."""
+    """The manufacturer-neutral kind of the fault; only while the mower is in error. A
+    category of a newer MowDeck that this version does not know is "other" (logged once)."""
     if data.state.get("activity") != "error":
         return None
     value = data.state.get("error_category")
-    return value if value in ERROR_CATEGORIES else None
+    if value in ERROR_CATEGORIES:
+        return str(value)
+    if not isinstance(value, str) or value in ("", "unknown"):
+        return None
+    if value not in _UNKNOWN_CATEGORIES:
+        _UNKNOWN_CATEGORIES.add(value)
+        _LOGGER.debug(
+            "Unknown error category %r (newer MowDeck?), shown as %r",
+            value,
+            ERROR_CATEGORY_FALLBACK,
+        )
+    return ERROR_CATEGORY_FALLBACK
 
 
 def _timestamp(data: MowerData) -> datetime | None:
@@ -551,7 +570,9 @@ async def async_setup_entry(
         entry,
         async_add_entities,
         lambda coordinator, m: [
-            MowDeckSensor(coordinator, m, d, health if d.health else None)
+            (ErrorCategorySensor if d.key == "error_category" else MowDeckSensor)(
+                coordinator, m, d, health if d.health else None
+            )
             for d in SENSORS
             if d.exists_fn(coordinator.data.capabilities.get(m) or {})
         ],
@@ -658,6 +679,43 @@ class MowDeckSensor(MowDeckEntity, SensorEntity):
             "error_message": state.get("error_message"),
             "error_category": _error_category(self._data()),
             "drive_recoverable": bool(state.get("drive_recoverable", False)),
+        }
+
+
+class ErrorCategorySensor(MowDeckSensor):
+    """The kind of the current fault, with the error in plain words as attributes.
+
+    While the mower is in error, the coordinator reads ``GET /telemetry/mowers/{id}/error``
+    once per error code and Home Assistant language; a MowDeck without the error lexicon
+    answers 404 and the text attributes stay empty."""
+
+    async def async_added_to_hass(self) -> None:
+        """Read the explanation of an error that is already there."""
+        await super().async_added_to_hass()
+        self.coordinator.async_follow_error(self.mower_id)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Follow a new or cleared error."""
+        self.coordinator.async_follow_error(self.mower_id)
+        super()._handle_coordinator_update()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Title, description, cause, steps, severity and whether the user has to act, in
+        the language of Home Assistant; none while the mower is not in error."""
+        if self.mower_state.get("activity") != "error":
+            return None
+        error = self.coordinator.error_explanation(self.mower_id)
+        severity = error.get("severity")
+        steps = error.get("steps")
+        return {
+            "title": error.get("title"),
+            "description": error.get("description") or None,
+            "cause": error.get("cause"),
+            "steps": [str(s) for s in steps] if isinstance(steps, list) else [],
+            "severity": severity if severity in ERROR_SEVERITIES else None,
+            "user_action": error.get("user_action"),
         }
 
 

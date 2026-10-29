@@ -20,7 +20,17 @@
       "mobile_signal": { "default": "mdi:signal-cellular-2" },
       "network": { "default": "mdi:access-point-network" },
       "self_check": { "default": "mdi:clipboard-check-outline", "state": { "blocked": "mdi:clipboard-alert-outline" } },
-      "error_category": { "default": "mdi:alert-outline" },
+      "error_category": {
+        "default": "mdi:alert-outline",
+        "state": {
+          "battery": "mdi:battery-alert-variant-outline",
+          "rain": "mdi:weather-pouring",
+          "positioning": "mdi:crosshairs-question",
+          "communication": "mdi:wifi-alert",
+          "docking": "mdi:home-alert-outline",
+          "firmware": "mdi:update"
+        }
+      },
       "blade_hours": { "default": "mdi:saw-blade" },
       "mowing_hours": { "default": "mdi:timer-outline" },
       "mowing_distance": { "default": "mdi:map-marker-distance" },
