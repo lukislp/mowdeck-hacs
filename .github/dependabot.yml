@@ -33,6 +33,11 @@ updates:
         patterns:
           - "homeassistant"
           - "pytest-homeassistant"
+    # PyTurboJPEG mirrors the pin of Home Assistant's camera component (its manifest.json),
+    # so it only moves with the Home Assistant release; a bump of its own would test against a
+    # version Home Assistant does not ship, and the daily attempt only fails the job.
+    ignore:
+      - dependency-name: pyturbojpeg
     commit-message:
       prefix: "fix(deps)"
     reviewers:
