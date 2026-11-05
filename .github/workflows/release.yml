@@ -51,13 +51,13 @@ jobs:
       # semantic-release runs from lukislp/ci-workflows' pinned toolchain (lock file in the
       # action) instead of a registry install per run or a package.json here.
       - name: Push as the semantic-release deploy key (if configured)
-        uses: lukislp/ci-workflows/.github/actions/deploy-key-push@0476ea5ecc543deade233e4dd940ea87db9f5df8 # v1.8.23
+        uses: lukislp/ci-workflows/.github/actions/deploy-key-push@ea532e9b173cf0e512c9d54c18886eebd0b0d1ab # v1.8.24
         with:
           deploy-key: ${{ secrets.SEMANTIC_RELEASE_DEPLOY_KEY }}
       # Dry run: computes the next version from the commits since the last tag without tagging.
       # "No relevant changes" is the expected outcome for docs/ci/chore-only pushes.
       - id: semrel
-        uses: lukislp/ci-workflows/.github/actions/semantic-release@0476ea5ecc543deade233e4dd940ea87db9f5df8 # v1.8.23
+        uses: lukislp/ci-workflows/.github/actions/semantic-release@ea532e9b173cf0e512c9d54c18886eebd0b0d1ab # v1.8.24
         with:
           dry-run: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -147,7 +147,7 @@ jobs:
             exit 1
           fi
       - name: Push as the semantic-release deploy key (if configured)
-        uses: lukislp/ci-workflows/.github/actions/deploy-key-push@0476ea5ecc543deade233e4dd940ea87db9f5df8 # v1.8.23
+        uses: lukislp/ci-workflows/.github/actions/deploy-key-push@ea532e9b173cf0e512c9d54c18886eebd0b0d1ab # v1.8.24
         with:
           deploy-key: ${{ secrets.SEMANTIC_RELEASE_DEPLOY_KEY }}
       # semantic-release creates its tag with a plain `git tag <name> <sha>`. With tag.gpgSign
@@ -177,7 +177,7 @@ jobs:
             echo "GIT_COMMITTER_NAME=mowdeck-release"
             echo "GIT_COMMITTER_EMAIL=155678024+lukislp@users.noreply.github.com"
           } >> "$GITHUB_ENV"
-      - uses: lukislp/ci-workflows/.github/actions/semantic-release@0476ea5ecc543deade233e4dd940ea87db9f5df8 # v1.8.23
+      - uses: lukislp/ci-workflows/.github/actions/semantic-release@ea532e9b173cf0e512c9d54c18886eebd0b0d1ab # v1.8.24
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       # Job publish builds this run's commit: make sure the tag exists on exactly that commit,
