@@ -11,7 +11,7 @@ from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import Event, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
+from pytest_homeassistant.common import MockConfigEntry, async_capture_events
 
 from custom_components.mowdeck import logbook
 from custom_components.mowdeck.const import DOMAIN, EVENT_VISION_PROPOSAL

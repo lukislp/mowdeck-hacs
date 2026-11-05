@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
+from pytest_homeassistant.common import MockConfigEntry, async_fire_time_changed
 
 from custom_components.mowdeck import render
 from custom_components.mowdeck.const import DOMAIN
@@ -117,10 +117,11 @@ async def test_map_image_with_the_planned_path(hass: HomeAssistant, fake_api: Fa
         "polylines": [[[0, 0], [5, 0], [5, 1]], [[5, 2], [0, 2], "x", [0, 3]]],
         "progress": {"index": 4, "direction": 0},
     }
+    first = state_of(hass, MAP).state
     with patch("custom_components.mowdeck.image.MAP_MIN_INTERVAL", timedelta(0)):
         await fake_api.push_state(MOWER_ID, mower_state(activity="mowing", charging=False))
-        await wait_for(hass, lambda: any(r.endswith("/path") for r in fake_api.requests))
-        await hass.async_block_till_done()
+        # The path is read in a background task; the picture changes once it is drawn.
+        await wait_for(hass, lambda: state_of(hass, MAP).state != first)
         text = await svg(hass, MAP)
         assert 'stroke-opacity="0.35"' in text
         # Points before index 4 are mowed: the first polyline (the next point alone draws

@@ -14,8 +14,8 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-from pytest_homeassistant_custom_component.typing import WebSocketGenerator
+from pytest_homeassistant.common import MockConfigEntry
+from pytest_homeassistant.typing import WebSocketGenerator
 
 from custom_components.mowdeck import camera, camera_relay
 from custom_components.mowdeck.camera_relay import (
@@ -152,7 +152,10 @@ async def test_camera_entity_without_a_stream(
     client = await hass_ws_client(hass)
     await client.send_json_auto_id({"type": "camera/capabilities", "entity_id": CAMERA})
     result = await client.receive_json()
-    assert result["result"] == {"frontend_stream_types": [StreamType.WEB_RTC]}
+    assert result["result"] == {
+        "frontend_stream_types": [StreamType.WEB_RTC],
+        "two_way_audio": False,
+    }
     assert not any("camera/session" in r for r in fake_api.requests)
     assert not fake_api.lease_history
 

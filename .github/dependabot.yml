@@ -26,13 +26,13 @@ updates:
     directory: /
     schedule:
       interval: daily
-    # pytest-homeassistant-custom-component pins one Home Assistant release exactly, so both
-    # pins move in one PR; a bump of only one of them can never resolve.
+    # pytest-homeassistant pins one Home Assistant release exactly, so both pins move in one
+    # PR; a bump of only one of them can never resolve.
     groups:
       home-assistant:
         patterns:
           - "homeassistant"
-          - "pytest-homeassistant-custom-component"
+          - "pytest-homeassistant"
     commit-message:
       prefix: "fix(deps)"
     reviewers:
