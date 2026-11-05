@@ -11,7 +11,7 @@ from homeassistant.components import persistent_notification
 from homeassistant.core import Event, HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import issue_registry as ir
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
+from pytest_homeassistant.common import MockConfigEntry, async_capture_events
 
 from custom_components.mowdeck import logbook
 from custom_components.mowdeck.const import (

@@ -9,18 +9,17 @@ license = { text = "AGPL-3.0-only" }
 
 [tool.uv]
 package = false
-# homeassistant 2026.10.x pins Pillow==12.3.0 and uv==0.12.23 exactly; both have published
-# security advisories fixed in Pillow 13.0.0 and uv 0.13.4. Dev/test environment only (HACS
-# ships just custom_components/mowdeck). Drop once Home Assistant bumps its pins.
-override-dependencies = ["pillow>=13.0.0", "uv>=0.13.4"]
 
 [dependency-groups]
 dev = [
-  # pytest-homeassistant-custom-component pins the matching homeassistant release exactly.
-  "homeassistant==2026.10.0",
-  "pytest-homeassistant-custom-component==0.13.371",
+  # pytest-homeassistant (home-assistant/core, packages/pytest-homeassistant) pins the matching
+  # homeassistant release exactly, so both move together.
+  "homeassistant==2026.11.0",
+  "pytest-homeassistant==2026.11.0",
   # The camera platform imports PyTurboJPEG (a requirement of the camera component).
   "PyTurboJPEG==1.8.3",
+  # pytest-homeassistant does not depend on pytest-cov (the old harness did).
+  "pytest-cov>=7.0.0",
   "mypy>=1.13.0",
   "ruff>=0.8.4",
 ]
@@ -29,7 +28,10 @@ dev = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
-addopts = "-ra"
+# `-p no:respx`: Home Assistant installs its httpx alias before respx is imported (asked for by
+# the pytest-homeassistant README).
+addopts = "-ra -p no:respx"
+pythonpath = ["."]
 
 [tool.coverage.run]
 branch = true
@@ -58,7 +60,7 @@ implicit_reexport = true
 
 # The test harness ships no type information.
 [[tool.mypy.overrides]]
-module = ["pytest_homeassistant_custom_component.*"]
+module = ["pytest_homeassistant.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
