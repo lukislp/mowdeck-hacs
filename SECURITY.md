@@ -24,7 +24,7 @@ Only the latest release and the `main` branch receive security fixes.
 
 ## Verifying a release
 
-Release tags are SSH-signed. The release asset `mowdeck.zip` (what HACS installs) comes with
+Release tags are created by the lktec-bot GitHub App through the GitHub API; the tag itself carries no signature. The release asset `mowdeck.zip` (what HACS installs) comes with
 `SHA256SUMS`, a Sigstore bundle per file and a GitHub build provenance attestation; the
 commands are in each release's notes, for example
 `gh attestation verify mowdeck.zip -R lukislp/mowdeck-hacs`.

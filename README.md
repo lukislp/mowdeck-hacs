@@ -11,7 +11,7 @@ Custom integration (HACS) that brings the mowers of a [MowDeck](https://github.c
 - Requires Home Assistant 2026.10.0 or newer (`hacs.json`).
 - [Integration quality scale](https://developers.home-assistant.io/docs/core/integration-quality-scale/): Gold (`custom_components/mowdeck/quality_scale.yaml`; tests keep the coverage above 95 %).
 - Licence: AGPL-3.0-only, like the rest of MowDeck.
-- Releases: semantic versions on the 0.x line, SSH-signed tags, `mowdeck.zip` with Sigstore signatures and build provenance (see `SECURITY.md`).
+- Releases: semantic versions on the 0.x line, `mowdeck.zip` with Sigstore signatures and build provenance (see `SECURITY.md`).
 
 ## Installation
 
