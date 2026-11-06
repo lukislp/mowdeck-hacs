@@ -1,0 +1,19 @@
+# Policy of the lktec-bot GitHub App for this repository. Committed to the default branch: the
+# bot reads it from there, never from a pull request. See docs/modules/release.md in
+# lukislp/lktec-bot for every key.
+version: 1
+modules:
+  release:
+    enabled: true
+    mode: tag
+    tag-format: "v{version}"
+    branch: main
+    # Only used by a repository without any tag that matches tag-format; this one has tags on the
+    # 0.x line since v0.0.0.
+    first-version: "1.0.0"
+    # The rules .releaserc.json carried: while the version line is 0.x a breaking change is a
+    # minor release, and a refactor is a patch. Defaults after these: feat minor, fix/perf/revert
+    # patch, everything else nothing.
+    rules:
+      - { breaking: true, release: minor }
+      - { type: refactor, release: patch }

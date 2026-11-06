@@ -1,6 +1,6 @@
 # Changelog
 
-Release notes are generated from the commit messages by semantic-release and published with each
+Release notes are generated from the commit messages by the lktec-bot release module and published with each
 [GitHub release](https://github.com/lukislp/mowdeck-hacs/releases).
 
 The integration was moved here from the `integrations/home-assistant` folder of

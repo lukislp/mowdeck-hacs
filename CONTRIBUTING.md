@@ -41,23 +41,26 @@ uv run python scripts/check_hacs_layout.py
 
 ## Releases
 
-`.github/workflows/release.yml` releases on every push to `main` whose commits warrant one:
-semantic-release computes the version, creates the SSH-signed tag `v<version>` and the GitHub
-release, then `scripts/build_release_zip.py` builds `mowdeck.zip` from the tag with the version
-in `manifest.json` (the repository's manifest stays at `0.0.0`; HACS installs the zip,
-`zip_release` in `hacs.json`). The zip gets `SHA256SUMS`, Sigstore bundles and a build
-provenance attestation. A release makes no commit.
+`.github/workflows/release.yml` looks at every push to `main` through the release module of the
+lktec-bot GitHub App (policy and rules in `.github/lktec-bot.yml`). The version comes from the
+Conventional Commits since the highest `v*` tag: breaking change -> minor while on 0.x,
+`refactor` -> patch, `feat` -> minor, `fix`/`perf`/`revert` -> patch; docs, ci, chore and test
+commits publish nothing. When a release is due, the App creates the tag `v<version>` together with
+the GitHub release (and its notes) through the API, then the `publish` job builds `mowdeck.zip`
+from that commit with the version in `manifest.json` (the repository's manifest stays at `0.0.0`;
+HACS installs the zip, `zip_release` in `hacs.json`) and attaches it with `SHA256SUMS`, Sigstore
+bundles and a build provenance attestation. A release makes no commit.
+
+The tag itself carries no signature: GitHub does not sign tag objects that an App creates.
+`mowdeck.zip`, `SHA256SUMS`, the Sigstore bundles and the build provenance are what to verify.
 
 **The 0.x line.** The integration stays below 1.0.0 until the owner decides otherwise; on 0.x a
-breaking change is a minor release (`.releaserc.json`). The release job refuses to publish while
-no `v*` tag exists, because semantic-release would then start at 1.0.0: the line starts from the
-initial tag `v0.0.0`, which the owner creates once (signed, on `main`) before the first release.
-Going to 1.0.0 is one pull request that removes the `{"breaking": true, "release": "minor"}`
-rule and carries a `BREAKING CHANGE:` footer.
+breaking change is a minor release (the first rule in `.github/lktec-bot.yml`). The repository has
+tags from `v0.0.0` on, so the `first-version` of the policy is never used. Going to 1.0.0 is one
+pull request that removes the `{ breaking: true, release: minor }` rule and carries a
+`BREAKING CHANGE:` footer.
 
-**Secrets of the release:** `DEPLOY_SIGNING_KEY` (an ed25519 SSH key whose public half is a
-signing key of the owner's account; the job checks it before tagging) and, optionally,
-`SEMANTIC_RELEASE_DEPLOY_KEY` (a write deploy key, so the tag is pushed by a key).
-
+**Secrets of the release:** `LKTEC_BOT_APP_ID` and `LKTEC_BOT_PRIVATE_KEY` (the App must be
+installed on the repository).
 **A failed release.** When `publish` fails, the tag and the GitHub release already exist; re-run
 the failed job (`gh run rerun <run-id> --failed`). Do not delete or move a published tag.
