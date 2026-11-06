@@ -32,7 +32,7 @@ permissions:
 
 jobs:
   release:
-    uses: lukislp/lktec-bot/.github/workflows/release.yml@1777b411f0f6345e911afbd141952a8262e4b742 # 2026-11-06
+    uses: lukislp/lktec-bot/.github/workflows/release.yml@6b71474175af851f3b74bf876f9e671776d864ad # v0.1.0
     secrets:
       app-id: ${{ secrets.LKTEC_BOT_APP_ID }}
       private-key: ${{ secrets.LKTEC_BOT_PRIVATE_KEY }}
