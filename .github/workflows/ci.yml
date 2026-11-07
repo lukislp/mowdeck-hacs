@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - name: Harden the runner
@@ -43,7 +43,7 @@ jobs:
       - run: uv run python scripts/check_hacs_layout.py
 
   hassfest:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - name: Harden the runner
@@ -59,7 +59,7 @@ jobs:
   # releases), so it only passes on the public repository. Brand assets come from the
   # integration's own brand/ folder, not from home-assistant/brands.
   hacs:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - name: Harden the runner
