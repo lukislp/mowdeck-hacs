@@ -17,6 +17,9 @@
     "PYTHONDONTWRITEBYTECODE": "1",
     "UV_LINK_MODE": "copy"
   },
+  "remoteEnv": {
+    "PATH": "${containerWorkspaceFolder}/.venv/bin:${containerEnv:PATH}"
+  },
   "updateContentCommand": "bash .devcontainer/update-content.sh",
   "postAttachCommand": "bash .devcontainer/post-attach.sh",
   "customizations": {
