@@ -53,3 +53,21 @@ updates:
     reviewers:
       - "lukislp"
     open-pull-requests-limit: 5
+  - package-ecosystem: devcontainers
+    directory: /
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: "fix(deps)"
+    reviewers:
+      - "lukislp"
+    open-pull-requests-limit: 5
+  - package-ecosystem: docker
+    directory: /.devcontainer
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: "fix(deps)"
+    reviewers:
+      - "lukislp"
+    open-pull-requests-limit: 5
