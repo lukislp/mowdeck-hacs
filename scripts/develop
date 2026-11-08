@@ -22,6 +22,22 @@ logger:
 YAML
 fi
 
+# GitHub Codespaces forwards port 8123 through a reverse proxy on localhost that sets
+# X-Forwarded-For. Home Assistant answers "400 Bad Request" unless the http integration trusts it.
+if ! grep -q '^http:' config/configuration.yaml; then
+  cat >> config/configuration.yaml <<'YAML'
+
+# Trust the Codespaces port forwarder (a reverse proxy on localhost).
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 127.0.0.1
+    - ::1
+YAML
+elif ! grep -q 'use_x_forwarded_for' config/configuration.yaml; then
+  echo "scripts/develop: config/configuration.yaml has its own http: section; add use_x_forwarded_for: true and trusted_proxies 127.0.0.1 and ::1 to it, or the Codespaces port forwarding answers 400." >&2
+fi
+
 export PYTHONPATH="${PYTHONPATH:-}:${PWD}/custom_components"
 
 exec uv run hass --config "${PWD}/config" --debug
