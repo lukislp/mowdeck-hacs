@@ -23,20 +23,65 @@ YAML
 fi
 
 # GitHub Codespaces forwards port 8123 through a reverse proxy on localhost that sets
-# X-Forwarded-For. Home Assistant answers "400 Bad Request" unless the http integration trusts it.
-if ! grep -q '^http:' config/configuration.yaml; then
-  cat >> config/configuration.yaml <<'YAML'
+# X-Forwarded-For, and Home Assistant answers "400 Bad Request" unless its http integration
+# trusts that proxy. Since Home Assistant 2026.11 the http settings live in config/.storage/http
+# (HA's storage version 3.1: stable, pending and yaml_migration_done). A YAML http: block is only
+# migrated once, as an unconfirmed trial that reverts after 5 minutes, so this writes the stable
+# slot directly instead. It also repairs a store left behind by such a reverted migration.
+python3 - <<'PY' || echo "scripts/develop: could not check config/.storage/http (see above); continuing." >&2
+import ipaddress
+import json
+import pathlib
 
-# Trust the Codespaces port forwarder (a reverse proxy on localhost).
-http:
-  use_x_forwarded_for: true
-  trusted_proxies:
-    - 127.0.0.1
-    - ::1
-YAML
-elif ! grep -q 'use_x_forwarded_for' config/configuration.yaml; then
-  echo "scripts/develop: config/configuration.yaml has its own http: section; add use_x_forwarded_for: true and trusted_proxies 127.0.0.1 and ::1 to it, or the Codespaces port forwarding answers 400." >&2
-fi
+path = pathlib.Path("config/.storage/http")
+wanted = ["127.0.0.1/32", "::1/128"]
+fresh = {
+    "version": 3,
+    "minor_version": 1,
+    "key": "http",
+    "data": {
+        "stable": {
+            "server_port": 8123,
+            "use_x_forwarded_for": True,
+            "trusted_proxies": wanted,
+            "cors_allowed_origins": ["https://cast.home-assistant.io"],
+            "login_attempts_threshold": -1,
+            "ip_ban_enabled": True,
+            "ssl_profile": "intermediate_v6",
+            "use_x_frame_options": True,
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "error": None,
+            "error_message": None,
+        },
+        "pending": None,
+        "yaml_migration_done": True,
+    },
+}
+
+try:
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(fresh, indent=2) + "\n", encoding="utf-8")
+        print("scripts/develop: created config/.storage/http so the Codespaces forwarder is trusted.")
+    else:
+        store = json.loads(path.read_text(encoding="utf-8"))
+        stable = store["data"]["stable"]
+        proxies = stable.get("trusted_proxies", [])
+        known = {ipaddress.ip_network(p, strict=False) for p in proxies}
+        missing = [p for p in wanted if ipaddress.ip_network(p) not in known]
+        if stable.get("use_x_forwarded_for") is not True or missing:
+            stable["use_x_forwarded_for"] = True
+            stable["trusted_proxies"] = [*proxies, *missing]
+            store["data"]["pending"] = None
+            store["data"]["yaml_migration_done"] = True
+            path.write_text(json.dumps(store, indent=2) + "\n", encoding="utf-8")
+            print("scripts/develop: fixed config/.storage/http so the Codespaces forwarder is trusted.")
+except (OSError, ValueError, KeyError, TypeError, AttributeError):
+    print(
+        "scripts/develop: config/.storage/http is unreadable or has an unexpected layout; "
+        "delete it and run this script again, or the Codespaces port forwarding answers 400."
+    )
+PY
 
 export PYTHONPATH="${PYTHONPATH:-}:${PWD}/custom_components"
 
