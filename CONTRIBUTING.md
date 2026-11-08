@@ -39,6 +39,23 @@ uv run pytest --cov
 uv run python scripts/check_hacs_layout.py
 ```
 
+## Codespaces / Dev Container
+
+[Open the repository in GitHub Codespaces](https://codespaces.new/lukislp/mowdeck-hacs?quickstart=1)
+(or use "Reopen in Container" in VS Code) for a ready environment: Python 3.14, uv with the locked
+dependencies installed (`uv sync --locked`, run in the prebuild), ffmpeg and the system
+libraries Home Assistant's camera components load, ruff and mypy in the editor.
+
+- Run the checks of the previous section as shown there, for example
+  `uv run pytest --cov --cov-report=term-missing -p no:cacheprovider`.
+- `scripts/develop` starts Home Assistant in the foreground with `custom_components/mowdeck`
+  loaded from the checkout and its configuration in `config/` (git-ignored). Port 8123 is
+  forwarded (private); the first start takes a few minutes, onboarding creates a local owner
+  account. Restart it to apply code changes.
+- To add the integration you need a MowDeck server and an API token: the public demo or a
+  [MowDeck](https://github.com/lukislp/mowdeck) Codespace. No server URL or secret is part of the
+  configuration.
+
 ## Releases
 
 `.github/workflows/release.yml` looks at every push to `main` through the release module of the

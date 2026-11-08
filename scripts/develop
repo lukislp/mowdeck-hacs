@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# Starts a Home Assistant development instance in the foreground on port 8123, with
+# custom_components/mowdeck loaded from this checkout (edit, then restart to apply).
+# The configuration lives in config/ (git-ignored). Home Assistant installs the requirements of
+# the default integrations into config/deps on the first start, which takes a few minutes.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+mkdir -p config
+if [[ ! -f config/configuration.yaml ]]; then
+  cat > config/configuration.yaml <<'YAML'
+default_config:
+
+logger:
+  default: info
+  logs:
+    custom_components.mowdeck: debug
+YAML
+fi
+
+export PYTHONPATH="${PYTHONPATH:-}:${PWD}/custom_components"
+
+exec uv run hass --config "${PWD}/config" --debug
