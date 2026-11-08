@@ -655,6 +655,18 @@ uv run python scripts/check_hacs_layout.py
 
 CI (`.github/workflows/ci.yml`) runs the same plus hassfest and the HACS validation; releases, Dependabot and the security checks are described in `CONTRIBUTING.md` and `SECURITY.md`.
 
+### Develop in a Codespace
+
+Click the **Open in GitHub Codespaces** badge above. The Codespace comes with Python 3.14 and the locked dependencies (`uv sync --locked`) installed. Home Assistant does **not** start by itself; run it in the Codespace terminal:
+
+```bash
+scripts/develop
+```
+
+The first start takes a few minutes, because Home Assistant installs its frontend and other runtime packages into `config/`. Then open port 8123 in the **Ports** tab (`https://<codespace-name>-8123.app.github.dev`), create a local owner account in the onboarding, and add the integration under **Settings, Devices and services, Add integration, MowDeck**. Adding the integration needs a reachable MowDeck server, for example the public demo or a MowDeck Codespace. `scripts/develop` loads the integration from your checkout; restart it after a code change.
+
+Run the tests with `uv run pytest --cov --cov-report=term-missing -p no:cacheprovider`. More in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Licence
 
 AGPL-3.0-only, see `LICENSE`.
