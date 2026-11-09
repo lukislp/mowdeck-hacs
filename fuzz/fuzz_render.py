@@ -11,7 +11,7 @@ the geometry helpers return finite numbers for finite input.
 
 Run locally (Linux, Python 3.12 or 3.13 - the atheris wheel does not exist for 3.14):
     uv venv --python 3.12 .fuzz-venv
-    uv pip install --python .fuzz-venv --require-hashes --only-binary :all: -r fuzz/requirements.txt
+    uv pip install --python .fuzz-venv --require-hashes --only-binary=:all: -r fuzz/requirements.txt
     .fuzz-venv/bin/python fuzz/fuzz_render.py -max_total_time=60
 CI runs the same harness for a short, fixed time budget (see .github/workflows/ci.yml).
 """

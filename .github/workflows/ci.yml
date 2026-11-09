@@ -62,7 +62,9 @@ jobs:
           enable-cache: true
           cache-dependency-glob: fuzz/requirements.txt
       - run: uv venv --python 3.12 "$RUNNER_TEMP/fuzz-venv"
-      - run: uv pip install --python "$RUNNER_TEMP/fuzz-venv/bin/python" --require-hashes --only-binary :all: -r fuzz/requirements.txt
+      - run: >-
+          uv pip install --python "$RUNNER_TEMP/fuzz-venv/bin/python"
+          --require-hashes --only-binary=:all: -r fuzz/requirements.txt
       - run: '"$RUNNER_TEMP/fuzz-venv/bin/python" fuzz/fuzz_render.py -max_total_time=30 -rss_limit_mb=1024'
 
   hassfest:
