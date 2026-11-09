@@ -1,0 +1,6 @@
+# The fuzz job's only dependency, hash-pinned. It lives outside pyproject.toml/uv.lock because
+# the project requires Python >=3.14.2 while the atheris wheels stop at Python 3.13: the CI job
+# installs this file into a separate Python 3.12 environment (cp312 wheel below).
+atheris==3.0.0 \
+    --hash=sha256:510e502c57b6dc615fb174066407af620d4c7f73cf08a782c86e7761bf12c4eb \
+    --hash=sha256:a402cdca8a650d1371050b1f9552eb4cdc488d2db64950d603c4560318365eac

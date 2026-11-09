@@ -42,6 +42,29 @@ jobs:
       - run: uv run pytest --cov --cov-report=term-missing -p no:cacheprovider
       - run: uv run python scripts/check_hacs_layout.py
 
+  # Coverage-guided fuzzing (Atheris) of the pure SVG renderer and geometry helpers. The atheris
+  # wheels stop at Python 3.13 while the project needs 3.14, so this job installs the
+  # hash-pinned fuzz/requirements.txt into its own Python 3.12 environment.
+  fuzz:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.5"
+          enable-cache: true
+          cache-dependency-glob: fuzz/requirements.txt
+      - run: uv venv --python 3.12 "$RUNNER_TEMP/fuzz-venv"
+      - run: uv pip install --python "$RUNNER_TEMP/fuzz-venv/bin/python" --require-hashes --only-binary :all: -r fuzz/requirements.txt
+      - run: '"$RUNNER_TEMP/fuzz-venv/bin/python" fuzz/fuzz_render.py -max_total_time=30 -rss_limit_mb=1024'
+
   hassfest:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
